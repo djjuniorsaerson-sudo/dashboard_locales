@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 
-export default function Dashboard() {
+export default function Dashboard({ setIsSyncing }) {
   const { token, currentLocation } = useAuth();
   const [metrics, setMetrics] = useState({
     ventas_turno: 0,
@@ -11,8 +11,15 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
 
-  const fetchMetrics = async () => {
-    setLoading(true);
+  // Modal State para Agregar Stock
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [selectedStockItem, setSelectedStockItem] = useState(null);
+  const [qtyToAdd, setQtyToAdd] = useState('');
+  const [isSavingStock, setIsSavingStock] = useState(false);
+
+  const fetchMetrics = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
+    if (setIsSyncing) setIsSyncing(true);
     try {
       const res = await fetch(`http://localhost:8000/api/v1/data/dashboard/metrics`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -24,16 +31,66 @@ export default function Dashboard() {
     } catch (e) {
       console.error("Error fetching metrics", e);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
+      if (setIsSyncing) setIsSyncing(false);
     }
   };
 
   useEffect(() => {
-    fetchMetrics();
+    fetchMetrics(false);
     // Actualizar cada 15 segundos
-    const interval = setInterval(fetchMetrics, 15000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => fetchMetrics(true), 15000);
+    return () => {
+      clearInterval(interval);
+      if (setIsSyncing) setIsSyncing(false);
+    };
   }, [token]);
+
+  const handleAddStock = (item) => {
+    setSelectedStockItem(item);
+    setQtyToAdd('');
+    setIsStockModalOpen(true);
+  };
+
+  const closeStockModal = () => {
+    setIsStockModalOpen(false);
+    setSelectedStockItem(null);
+    setQtyToAdd('');
+  };
+
+  const submitStockUpdate = async (e) => {
+    e.preventDefault();
+    const qty = parseInt(qtyToAdd, 10);
+    
+    if (isNaN(qty) || qty === 0) {
+      alert("Por favor ingresa un número válido (puede ser negativo para restar).");
+      return;
+    }
+
+    setIsSavingStock(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/data/products/${selectedStockItem.id}/stock`, {
+        method: 'PATCH',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ stock: selectedStockItem.stock + qty })
+      });
+      
+      if (res.ok) {
+        await fetchMetrics();
+        closeStockModal();
+      } else {
+        alert("Error al actualizar el stock.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de red.");
+    } finally {
+      setIsSavingStock(false);
+    }
+  };
 
   return (
     <div>
@@ -153,8 +210,9 @@ export default function Dashboard() {
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: idx * 0.02 }}
                           whileHover={{ scale: 1.03 }}
+                          onClick={() => handleAddStock(item)}
                           key={item.id} 
-                          className={`flex items-center justify-between p-4 rounded-2xl border shadow-md transition-all ${isLowStock ? 'bg-red-500/10 border-red-500/40 hover:border-red-500/80 shadow-[inset_0_0_20px_rgba(239,68,68,0.1)]' : 'bg-gray-800/40 backdrop-blur-sm border-gray-700/50 hover:border-gray-500'}`}
+                          className={`cursor-pointer flex items-center justify-between p-4 rounded-2xl border shadow-md transition-all ${isLowStock ? 'bg-red-500/10 border-red-500/40 hover:border-red-500/80 shadow-[inset_0_0_20px_rgba(239,68,68,0.1)]' : 'bg-gray-800/40 backdrop-blur-sm border-gray-700/50 hover:border-emerald-500/50'}`}
                         >
                           <span className={`font-semibold truncate pr-3 ${isLowStock ? 'text-red-200' : 'text-gray-200'}`} title={item.name}>{item.name}</span>
                           <span className={`px-3 py-1.5 rounded-lg font-black text-sm shadow-inner ${isLowStock ? 'bg-red-500/20 text-red-400 shadow-red-500/30 animate-pulse' : 'bg-gray-900/80 text-emerald-400 shadow-black/50'}`}>
@@ -174,6 +232,68 @@ export default function Dashboard() {
 
           </div>
         </>
+      )}
+
+      {/* Modal Ajustar Stock */}
+      {isStockModalOpen && selectedStockItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden relative">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+            <div className="px-6 py-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
+              <h3 className="text-lg font-bold text-white flex items-center">
+                <svg className="w-5 h-5 mr-2 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                Ajustar Stock
+              </h3>
+              <button onClick={closeStockModal} className="text-gray-400 hover:text-white transition-colors">
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={submitStockUpdate} className="p-6 space-y-4">
+              <div className="text-center mb-4">
+                <p className="text-gray-400 text-sm">Producto seleccionado:</p>
+                <p className="text-lg font-bold text-white">{selectedStockItem.name}</p>
+                <div className="mt-2 inline-block bg-gray-900 rounded-lg px-4 py-2 border border-gray-700">
+                  <span className="text-gray-400 text-sm mr-2">Stock Actual:</span>
+                  <span className="text-emerald-400 font-black text-lg">{selectedStockItem.stock}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2 text-center">¿Cuánto stock deseas AÑADIR o RESTAR?</label>
+                <input 
+                  type="number" 
+                  required
+                  value={qtyToAdd}
+                  onChange={(e) => setQtyToAdd(e.target.value)}
+                  className="w-full text-center text-xl font-bold bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  placeholder="Ej: 10 o -5"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 text-center mt-2">
+                  Usa números negativos (ej. -5) para restar unidades.
+                </p>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3 w-full">
+                <button 
+                  type="button"
+                  onClick={closeStockModal}
+                  className="flex-1 py-2 rounded-lg font-medium text-gray-300 hover:bg-gray-700 border border-gray-600 hover:border-gray-500 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSavingStock || !qtyToAdd}
+                  className="flex-1 py-2 rounded-lg font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingStock ? 'Guardando...' : 'Confirmar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -106,6 +106,73 @@ export default function Products() {
     }
   };
 
+  const handleAddStock = async (p) => {
+    const qtyToAdd = window.prompt(`¿Cuánto stock deseas AÑADIR a "${p.name}"? (Stock actual: ${p.stock})`);
+    if (!qtyToAdd) return;
+    
+    const qty = parseInt(qtyToAdd, 10);
+    if (isNaN(qty) || qty === 0) {
+      alert("Por favor ingresa un número válido (puede ser negativo para restar).");
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/data/products/${p.id}`, {
+        method: 'PUT',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: p.name, price: p.price, stock: p.stock + qty })
+      });
+      
+      if (res.ok) {
+        await fetchProducts();
+      } else {
+        alert("Error al actualizar el stock.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de red.");
+    }
+  };
+
+  const saveOrder = async (newProductsList) => {
+    try {
+      const orderedIds = newProductsList.map(p => p.id);
+      await fetch(`http://localhost:8000/api/v1/data/products/reorder`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ordered_ids: orderedIds })
+      });
+    } catch (e) {
+      console.error("Error reordering:", e);
+    }
+  };
+
+  const handleMoveUp = (index) => {
+    if (index === 0) return;
+    const newProducts = [...products];
+    const temp = newProducts[index];
+    newProducts[index] = newProducts[index - 1];
+    newProducts[index - 1] = temp;
+    setProducts(newProducts);
+    saveOrder(newProducts);
+  };
+
+  const handleMoveDown = (index) => {
+    if (index === products.length - 1) return;
+    const newProducts = [...products];
+    const temp = newProducts[index];
+    newProducts[index] = newProducts[index + 1];
+    newProducts[index + 1] = temp;
+    setProducts(newProducts);
+    saveOrder(newProducts);
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -128,6 +195,7 @@ export default function Products() {
           <table className="w-full text-left text-sm text-gray-400">
             <thead className="bg-gray-900 text-gray-300 uppercase font-semibold">
               <tr>
+                <th className="px-6 py-4 w-24">Orden</th>
                 <th className="px-6 py-4">Nombre</th>
                 <th className="px-6 py-4">Precio</th>
                 <th className="px-6 py-4">Stock</th>
@@ -136,8 +204,28 @@ export default function Products() {
               </tr>
             </thead>
             <tbody>
-              {products.map((p) => (
+              {products.map((p, index) => (
                 <tr key={p.id} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-1 items-start justify-center">
+                      <button 
+                        onClick={() => handleMoveUp(index)} 
+                        disabled={index === 0}
+                        className="text-gray-500 hover:text-white disabled:opacity-30 p-1"
+                        title="Subir"
+                      >
+                        ▲
+                      </button>
+                      <button 
+                        onClick={() => handleMoveDown(index)} 
+                        disabled={index === products.length - 1}
+                        className="text-gray-500 hover:text-white disabled:opacity-30 p-1"
+                        title="Bajar"
+                      >
+                        ▼
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-6 py-4 font-medium text-white">{p.name}</td>
                   <td className="px-6 py-4">${p.price.toLocaleString()}</td>
                   <td className="px-6 py-4">{p.stock}</td>
@@ -147,6 +235,7 @@ export default function Products() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
+                    <button onClick={() => handleAddStock(p)} className="text-emerald-400 hover:text-emerald-300 mr-3 font-semibold transition-colors">+ Stock</button>
                     <button onClick={() => handleOpenEdit(p)} className="text-blue-400 hover:text-blue-300 mr-3 transition-colors">Editar</button>
                     <button onClick={() => handleDelete(p.id, p.name)} className="text-red-400 hover:text-red-300 transition-colors">Eliminar</button>
                   </td>
@@ -154,7 +243,7 @@ export default function Products() {
               ))}
               {products.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">No hay productos registrados en Yummy POS.</td>
+                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">No hay productos registrados en Yummy POS.</td>
                 </tr>
               )}
             </tbody>

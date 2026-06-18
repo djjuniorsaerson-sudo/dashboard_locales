@@ -97,6 +97,10 @@ export default function Empleados() {
     }
   };
 
+  const totalAPagar = employees.reduce((acc, emp) => {
+    return (emp.final_salary > 0) ? acc + emp.final_salary : acc;
+  }, 0);
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -154,6 +158,19 @@ export default function Empleados() {
                   </tr>
                 )}
               </tbody>
+              {employees.length > 0 && (
+                <tfoot className="bg-gray-900/80 border-t border-gray-600">
+                  <tr>
+                    <td colSpan="5" className="px-6 py-5 text-right font-bold text-white uppercase tracking-wider text-sm">
+                      Total Sueldos a Pagar <span className="text-gray-500 text-xs normal-case ml-2">(Ignorando negativos)</span>
+                    </td>
+                    <td className="px-6 py-5 text-right text-emerald-400 font-black text-xl">
+                      ${totalAPagar.toLocaleString()}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         )}

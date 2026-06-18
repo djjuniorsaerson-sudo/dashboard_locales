@@ -9,12 +9,15 @@ import Empleados from './pages/Empleados';
 import Caja from './pages/Caja';
 import Repartidores from './pages/Repartidores';
 import NuevoPedido from './pages/NuevoPedido';
+import GestionPedidos from './pages/GestionPedidos';
 
 import Cocina from './pages/Cocina';
 
 function MainLayout() {
   const { logout, locations, currentLocation, setCurrentLocation } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
+  const [orderToEdit, setOrderToEdit] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col md:flex-row">
@@ -50,7 +53,8 @@ function MainLayout() {
         </div>
 
         <nav className="flex-1 space-y-1 p-4">
-          <button onClick={() => setCurrentView('nuevo_pedido')} className={`w-full text-center px-4 py-3 mb-4 rounded-xl font-bold transition-all shadow-lg hover:scale-105 ${currentView === 'nuevo_pedido' ? 'bg-emerald-500 text-gray-950 shadow-emerald-500/30' : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'}`}>+ NUEVO PEDIDO</button>
+          <button onClick={() => { setOrderToEdit(null); setCurrentView('nuevo_pedido'); }} className={`w-full text-center px-4 py-3 mb-2 rounded-xl font-bold transition-all shadow-lg hover:scale-105 ${currentView === 'nuevo_pedido' && !orderToEdit ? 'bg-emerald-500 text-gray-950 shadow-emerald-500/30' : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'}`}>+ NUEVO PEDIDO</button>
+          <button onClick={() => setCurrentView('gestion_pedidos')} className={`w-full text-center px-4 py-2 mb-4 rounded-xl font-bold transition-all shadow-lg hover:scale-105 ${currentView === 'gestion_pedidos' || orderToEdit ? 'bg-purple-500 text-gray-950 shadow-purple-500/30' : 'bg-purple-600/20 text-purple-400 border border-purple-500/30'}`}>GESTIÓN DE PEDIDOS</button>
           
           <button onClick={() => setCurrentView('dashboard')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'dashboard' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Dashboard</button>
           <button onClick={() => setCurrentView('cocina')} className={`w-full text-left px-4 py-2.5 rounded-lg font-bold transition-colors ${currentView === 'cocina' ? 'bg-orange-600/20 text-orange-400' : 'text-orange-500/60 hover:bg-gray-800 hover:text-orange-400'}`}>Pedidos en Cocina</button>
@@ -71,7 +75,8 @@ function MainLayout() {
         {/* Header Content */}
         <header className="h-[73px] bg-gray-900 border-b border-gray-800 px-4 lg:px-8 flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-100">
-            {currentView === 'nuevo_pedido' && 'Tomar Nuevo Pedido'}
+            {currentView === 'nuevo_pedido' && (orderToEdit ? `Editando Pedido #${orderToEdit.id}` : 'Tomar Nuevo Pedido')}
+            {currentView === 'gestion_pedidos' && 'Gestión de Pedidos Activos'}
             {currentView === 'dashboard' && 'Resumen General'}
             {currentView === 'cocina' && 'Monitor de Cocina (KDS)'}
             {currentView === 'caja' && 'Movimientos de Caja'}
@@ -81,14 +86,19 @@ function MainLayout() {
             {currentView === 'employees' && 'Nómina de Empleados'}
             {currentView === 'repartidores' && 'Flota de Repartidores'}
           </h2>
-          <div className="flex items-center space-x-3 text-sm text-gray-400">
-            <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Sincronizado</span>
+          <div className="flex items-center space-x-3 text-sm text-gray-400 transition-all duration-300">
+            {isSyncing ? (
+              <span className="flex items-center text-amber-400 font-medium tracking-wide"><span className="w-2 h-2 rounded-full bg-amber-400 mr-2 animate-ping"></span> Actualizando...</span>
+            ) : (
+              <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Sincronizado</span>
+            )}
           </div>
         </header>
 
         <div className="p-4 lg:p-8 h-[calc(100vh-73px)]">
-          {currentView === 'nuevo_pedido' && <NuevoPedido />}
-          {currentView === 'dashboard' && <Dashboard />}
+          {currentView === 'nuevo_pedido' && <NuevoPedido orderToEdit={orderToEdit} setOrderToEdit={setOrderToEdit} setCurrentView={setCurrentView} />}
+          {currentView === 'gestion_pedidos' && <GestionPedidos setOrderToEdit={setOrderToEdit} setCurrentView={setCurrentView} />}
+          {currentView === 'dashboard' && <Dashboard setIsSyncing={setIsSyncing} />}
           {currentView === 'cocina' && <Cocina />}
           {currentView === 'caja' && <Caja />}
           {currentView === 'products' && <Products />}

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, ShoppingBag, User } from 'lucide-react';
+import { Plus, Trash2, ShoppingBag, User, CheckCircle2 } from 'lucide-react';
 
-export default function NuevoPedido() {
-  const { token } = useAuth();
+export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentView }) {
+  const { token, currentLocation } = useAuth();
   const [products, setProducts] = useState([]);
+  const [isReorderMode, setIsReorderMode] = useState(false);
   
   // Client Form
   const [phone, setPhone] = useState('');
@@ -28,6 +29,66 @@ export default function NuevoPedido() {
     .then(data => setProducts(data.filter(p => p.active)))
     .catch(err => console.error(err));
   }, [token]);
+
+  const saveOrder = async (newProductsList) => {
+    try {
+      const orderedIds = newProductsList.map(p => p.id);
+      await fetch(`http://localhost:8000/api/v1/data/products/reorder`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ordered_ids: orderedIds })
+      });
+    } catch (e) {
+      console.error("Error reordering:", e);
+    }
+  };
+
+  const handleMoveLeft = (e, index) => {
+    e.stopPropagation();
+    if (index === 0) return;
+    const newProducts = [...products];
+    const temp = newProducts[index];
+    newProducts[index] = newProducts[index - 1];
+    newProducts[index - 1] = temp;
+    setProducts(newProducts);
+    saveOrder(newProducts);
+  };
+
+  const handleMoveRight = (e, index) => {
+    e.stopPropagation();
+    if (index === products.length - 1) return;
+    const newProducts = [...products];
+    const temp = newProducts[index];
+    newProducts[index] = newProducts[index + 1];
+    newProducts[index + 1] = temp;
+    setProducts(newProducts);
+    saveOrder(newProducts);
+  };
+
+  useEffect(() => {
+    if (orderToEdit) {
+      setPhone(orderToEdit.phone || '');
+      setName(orderToEdit.client_name || '');
+      setAddress(orderToEdit.address || '');
+      setOrderType(orderToEdit.order_type || 'Delivery');
+      setPaymentMethod(orderToEdit.payment_method || 'efectivo');
+      if (orderToEdit.items) {
+        setCart(orderToEdit.items.map((item, idx) => ({
+          ...item,
+          customKey: item.customKey || `imported-${item.id || idx}-${idx}`,
+          toppings: item.toppings || [],
+          extras: item.extras || [],
+          guarniciones: item.guarniciones || [],
+          product_name: item.name || item.product_name,
+        })));
+      }
+    } else {
+      setCart([]); setPhone(''); setName(''); setAddress('');
+    }
+  }, [orderToEdit]);
 
   const handlePhoneBlur = async () => {
     if (!phone) return;
@@ -189,23 +250,34 @@ export default function NuevoPedido() {
     }
 
     try {
-      const res = await fetch('http://localhost:8000/api/v1/orders/create', {
-        method: 'POST',
+      const isEdit = !!orderToEdit;
+      const url = isEdit ? `http://localhost:8000/api/v1/data/pedidos/${orderToEdit.id}` : 'http://localhost:8000/api/v1/orders/create';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'X-Integration-Key': currentLocation?.api_key || ''
         },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
       
       if (res.ok) {
-        setSuccessMsg("¡Pedido enviado a Yummy con éxito!");
+        setSuccessMsg(isEdit ? "¡Pedido actualizado con éxito!" : "¡Pedido enviado a Yummy con éxito!");
         setCart([]);
         setPhone('');
         setName('');
         setAddress('');
         setForceDuplicate(false);
+        if (isEdit) {
+          setTimeout(() => {
+            setOrderToEdit(null);
+            setCurrentView('gestion_pedidos');
+          }, 1500);
+        }
       } else if (res.status === 409 && !overrideDuplicate) {
         setDuplicateWarning(data.detail?.message || data.detail || "Ya existe un pedido activo para este cliente.");
       } else {
@@ -244,9 +316,17 @@ export default function NuevoPedido() {
       {/* Catálogo de Productos */}
       <div className="flex-1 flex flex-col bg-gray-900 rounded-2xl border border-gray-800/50 shadow-2xl overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-96 bg-blue-500/10 blur-[120px] pointer-events-none rounded-full"></div>
-        <div className="p-5 border-b border-gray-800/80 bg-gray-900/50 backdrop-blur-xl z-10 flex items-center">
-          <ShoppingBag className="w-5 h-5 text-blue-400 mr-2" />
-          <h2 className="text-xl font-bold text-white tracking-wide">Catálogo Rápido</h2>
+        <div className="p-5 border-b border-gray-800/80 bg-gray-900/50 backdrop-blur-xl z-10 flex justify-between items-center">
+          <div className="flex items-center">
+            <ShoppingBag className="w-5 h-5 text-blue-400 mr-2" />
+            <h2 className="text-xl font-bold text-white tracking-wide">Catálogo Rápido</h2>
+          </div>
+          <button 
+            onClick={() => setIsReorderMode(!isReorderMode)}
+            className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${isReorderMode ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white hover:bg-gray-700'}`}
+          >
+            {isReorderMode ? 'Cerrar Edición' : 'Reordenar'}
+          </button>
         </div>
         <div className="p-5 overflow-y-auto flex-1 z-10 custom-scrollbar">
           <motion.div 
@@ -255,17 +335,35 @@ export default function NuevoPedido() {
             animate="show"
             className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
           >
-            {products.map(p => (
+            {products.map((p, index) => (
               <motion.button 
                 variants={itemVariants}
-                whileHover={{ scale: 1.03, y: -2 }}
-                whileTap={{ scale: 0.97 }}
+                whileHover={!isReorderMode ? { scale: 1.03, y: -2 } : {}}
+                whileTap={!isReorderMode ? { scale: 0.97 } : {}}
                 key={p.id}
-                onClick={() => openCustomizer(p)}
-                className="group relative bg-gray-800/40 backdrop-blur-md border border-gray-700/50 p-5 rounded-2xl flex flex-col items-center justify-center text-center transition-all hover:bg-gray-800/80 hover:border-blue-500/50 overflow-hidden"
+                onClick={() => !isReorderMode && openCustomizer(p)}
+                className={`group relative bg-gray-800/40 backdrop-blur-md border p-5 rounded-2xl flex flex-col items-center justify-center text-center transition-all overflow-hidden ${isReorderMode ? 'border-amber-500/30 ring-1 ring-amber-500/20' : 'border-gray-700/50 hover:bg-gray-800/80 hover:border-blue-500/50'}`}
               >
-                <div className="absolute inset-0 bg-gradient-to-t from-blue-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:to-transparent transition-all"></div>
-                <span className="font-bold text-white mb-2 relative z-10 drop-shadow-md">{p.name}</span>
+                {!isReorderMode && <div className="absolute inset-0 bg-gradient-to-t from-blue-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:to-transparent transition-all"></div>}
+                
+                {isReorderMode && (
+                  <div className="absolute top-2 right-2 left-2 flex justify-between z-20">
+                    <div 
+                      onClick={(e) => handleMoveLeft(e, index)}
+                      className={`p-1 rounded bg-gray-900 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors ${index === 0 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer shadow-lg'}`}
+                    >
+                      ◀
+                    </div>
+                    <div 
+                      onClick={(e) => handleMoveRight(e, index)}
+                      className={`p-1 rounded bg-gray-900 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors ${index === products.length - 1 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer shadow-lg'}`}
+                    >
+                      ▶
+                    </div>
+                  </div>
+                )}
+                
+                <span className={`font-bold text-white mb-2 relative z-10 drop-shadow-md ${isReorderMode ? 'mt-4' : ''}`}>{p.name}</span>
                 <span className="text-emerald-400 font-bold relative z-10 bg-emerald-500/10 px-3 py-1 rounded-full text-sm">${p.price.toLocaleString()}</span>
               </motion.button>
             ))}
@@ -395,15 +493,25 @@ export default function NuevoPedido() {
           )}
 
           {!duplicateWarning && (
-            <motion.button 
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              disabled={loading || cart.length === 0}
-              onClick={() => submitOrder(false)}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 disabled:opacity-50 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center text-lg"
-            >
-              {loading ? 'Procesando...' : 'Confirmar Pedido'}
-            </motion.button>
+            <div className="flex flex-col gap-2">
+              <motion.button 
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                disabled={loading || cart.length === 0}
+                onClick={() => submitOrder(false)}
+                className={`w-full text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center text-lg disabled:opacity-50 ${orderToEdit ? 'bg-gradient-to-r from-purple-600 to-indigo-600 shadow-purple-500/20' : 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-500/20'}`}
+              >
+                {loading ? 'Procesando...' : (orderToEdit ? 'Actualizar Pedido' : 'Confirmar Pedido')}
+              </motion.button>
+              {orderToEdit && (
+                <button 
+                  onClick={() => { setOrderToEdit(null); setCurrentView('gestion_pedidos'); }}
+                  className="w-full text-gray-400 hover:text-white py-2 text-sm font-medium transition-colors"
+                >
+                  Cancelar Edición
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

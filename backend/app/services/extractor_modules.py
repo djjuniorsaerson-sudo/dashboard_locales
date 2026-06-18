@@ -7,7 +7,7 @@ class ModulesExtractor:
         query = text("""
             SELECT id, name, price, stock_quantity, batch_status
             FROM productos
-            ORDER BY name ASC
+            ORDER BY display_order ASC, name ASC
         """)
         productos_raw = db.execute(query).fetchall()
         
@@ -147,6 +147,57 @@ class ModulesExtractor:
             return {"success": False, "error": str(e)}
 
     @staticmethod
+    def update_product_stock(db: Session, product_id: int, new_stock: int):
+        try:
+            current = db.execute(text("SELECT name, stock_quantity FROM productos WHERE id = :id"), {"id": product_id}).fetchone()
+            if not current:
+                return {"success": False, "error": "Producto no encontrado"}
+                
+            current_name, current_stock = current[0], current[1]
+            
+            update_q = text("""
+                UPDATE productos 
+                SET stock_quantity = :stock
+                WHERE id = :id
+            """)
+            db.execute(update_q, {
+                "stock": new_stock,
+                "id": product_id
+            })
+            
+            if new_stock != current_stock:
+                diff = new_stock - current_stock
+                move_q = text("""
+                    INSERT INTO stock_movimientos (
+                        product_id, product_name, movement_type, quantity, notes, created_at
+                    ) VALUES (
+                        :id, :name, 'ajuste', :qty, 'Ajuste rápido desde dashboard', NOW()
+                    )
+                """)
+                db.execute(move_q, {
+                    "id": product_id,
+                    "name": current_name,
+                    "qty": diff
+                })
+                
+            db.commit()
+            return {"success": True}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def reorder_products(db: Session, ordered_ids: list):
+        try:
+            for idx, pid in enumerate(ordered_ids):
+                db.execute(text("UPDATE productos SET display_order = :order WHERE id = :id"), {"order": idx, "id": pid})
+            db.commit()
+            return {"success": True}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
     def delete_product(db: Session, product_id: int):
         try:
             relations = ["productos_toppings", "productos_guarniciones", "productos_extras", "productos_estados"]
@@ -181,6 +232,59 @@ class ModulesExtractor:
                 "created_at": str(r[5]) if r[5] else None
             } for r in result
         ]
+
+    @staticmethod
+    def create_client(db: Session, data: dict):
+        try:
+            query = text("""
+                INSERT INTO clientes (name, phone, address, notes, purchase_count, created_at)
+                VALUES (:name, :phone, :address, :notes, 0, NOW())
+                RETURNING id
+            """)
+            result = db.execute(query, {
+                "name": data.get("name", ""),
+                "phone": data.get("phone", ""),
+                "address": data.get("address", ""),
+                "notes": data.get("notes", "")
+            })
+            db.commit()
+            return {"success": True, "id": result.scalar()}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def update_client(db: Session, client_id: int, data: dict):
+        try:
+            query = text("""
+                UPDATE clientes
+                SET name = :name, phone = :phone, address = :address, notes = :notes
+                WHERE id = :id
+            """)
+            db.execute(query, {
+                "name": data.get("name", ""),
+                "phone": data.get("phone", ""),
+                "address": data.get("address", ""),
+                "notes": data.get("notes", ""),
+                "id": client_id
+            })
+            db.commit()
+            return {"success": True}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def delete_client(db: Session, client_id: int):
+        try:
+            # Eliminar el cliente. La base de datos tiene ON DELETE SET NULL para pedidos.customer_id
+            query = text("DELETE FROM clientes WHERE id = :id")
+            db.execute(query, {"id": client_id})
+            db.commit()
+            return {"success": True}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
 
     @staticmethod
     def get_employees(db: Session):
