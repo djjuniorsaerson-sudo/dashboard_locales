@@ -26,7 +26,7 @@ export default function Cocina() {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/cocina/pedidos`, {
+      const res = await fetch(`http://localhost:8000/api/v1/data/cocina/pedidos?t=${Date.now()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -76,17 +76,9 @@ export default function Cocina() {
   };
 
   // Filtrar según lógica Yummy
-  const kitchen1Orders = orders.filter(o => 
-    o.kitchen_tickets?.kitchen1?.visible === true &&
-    o.kitchen_tickets?.kitchen1?.items?.length > 0 &&
-    o.kitchen_tickets?.kitchen1?.status === 'active'
-  );
-
-  const kitchen2Orders = orders.filter(o => 
-    o.kitchen_tickets?.kitchen2?.visible === true &&
-    o.kitchen_tickets?.kitchen2?.items?.length > 0 &&
-    o.kitchen_tickets?.kitchen2?.status === 'active'
-  );
+  // Temporary override: show all orders for debugging
+  const kitchen1Orders = orders;
+  const kitchen2Orders = orders;
 
   const readyOrders = orders.filter(o => o.status === 'Listo' && o.archived === false);
 
@@ -96,9 +88,19 @@ export default function Cocina() {
   return (
     <div className="flex flex-col h-full space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-1">Pedidos en Cocina (KDS)</h2>
-          <p className="text-gray-400">Monitor en Tiempo Real</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-1">Pedidos en Cocina (KDS)</h2>
+            <p className="text-gray-400">Monitor en Tiempo Real</p>
+          </div>
+          <button 
+            onClick={fetchOrders}
+            className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors border border-gray-700 h-fit"
+            title="Actualizar pedidos"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            Actualizar
+          </button>
         </div>
         <div className="flex bg-gray-800 rounded-lg p-1 border border-gray-700 w-max shadow-inner">
           <button 
@@ -184,7 +186,12 @@ export default function Cocina() {
                     {/* Card Header */}
                     <div className={`p-4 ${headerBg} border-b border-gray-800 flex justify-between items-center`}>
                       <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-gray-400">#{order.id} • {order.order_type}</span>
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-400 flex flex-wrap gap-1 items-center">
+                          #{order.id} • {order.order_type}
+                          {order.is_scheduled && <span className="bg-purple-500 text-white text-[9px] px-1.5 py-0.5 rounded">PROG</span>}
+                          {order.is_updated && <span className="bg-blue-500 text-white text-[9px] px-1.5 py-0.5 rounded">ACTUALIZADO</span>}
+                          {order.needs_reassignment && <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded animate-pulse">REASIGNAR</span>}
+                        </span>
                         <h3 className="text-lg font-bold text-white mt-1 truncate" title={order.customer_name || 'Sin Nombre'}>{order.customer_name || 'Sin Nombre'}</h3>
                       </div>
                       <div className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl ${timerBg} transition-colors`}>
@@ -201,9 +208,11 @@ export default function Cocina() {
                       {(ticket?.items || order.items || []).map((item, idx) => (
                         <div key={idx} className="border-b border-gray-800/50 pb-3 last:border-0 last:pb-0">
                           <div className="flex justify-between items-start">
-                            <span className="font-bold text-gray-100 text-lg">
-                              <span className="text-orange-400 mr-2">{item.quantity}x</span> 
-                              {item.product_name}
+                            <span className="font-bold text-gray-100 text-lg flex items-center flex-wrap">
+                              <span><span className="text-orange-400 mr-2">{item.quantity}x</span>{item.product_name}</span>
+                              {item.routing_type === 'Prioritario' && <span className="ml-2 text-[9px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded tracking-widest shadow-[0_0_5px_rgba(220,38,38,0.6)]">PRIORITARIO</span>}
+                              {item.routing_type === 'Prioritario 2' && <span className="ml-2 text-[9px] font-bold bg-orange-600 text-white px-1.5 py-0.5 rounded tracking-widest">PRIORITARIO 2</span>}
+                              {item.routing_type === 'Secundario' && <span className="ml-2 text-[9px] font-medium bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded tracking-widest">SECUNDARIO</span>}
                             </span>
                           </div>
                           

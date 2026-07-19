@@ -427,7 +427,7 @@ class ModulesExtractor:
                 
                 # Ventas del día
                 ventas_query = text("""
-                    SELECT id, total, payment_method, created_at 
+                    SELECT id, total, payment_method, created_at, payment_breakdown_json 
                     FROM ventas 
                     WHERE DATE(created_at) = :day
                     ORDER BY created_at ASC
@@ -444,6 +444,8 @@ class ModulesExtractor:
                     "end_time": None,
                     "efectivo": 0.0,
                     "transferencia": 0.0,
+                    "online": 0.0,
+                    "debito": 0.0,
                     "mixto": 0.0,
                     "movimientos": []
                 }
@@ -485,6 +487,8 @@ class ModulesExtractor:
                                 "end_time": None,
                                 "efectivo": 0.0,
                                 "transferencia": 0.0,
+                                "online": 0.0,
+                                "debito": 0.0,
                                 "mixto": 0.0,
                                 "movimientos": []
                             }
@@ -493,10 +497,26 @@ class ModulesExtractor:
                         v = ev["data"]
                         v_total = float(v[1] or 0)
                         v_method = (v[2] or "efectivo").lower()
+                        v_breakdown = v[4] if len(v) > 4 else None
+                        
                         current_shift["ingresos"] += v_total
                         
                         if "mixto" in v_method:
                             current_shift["mixto"] += v_total
+                            if v_breakdown:
+                                import json
+                                try:
+                                    bdown = json.loads(v_breakdown) if isinstance(v_breakdown, str) else v_breakdown
+                                    current_shift["efectivo"] += float(bdown.get("efectivo", 0) or 0)
+                                    current_shift["transferencia"] += float(bdown.get("transferencia", 0) or 0)
+                                    current_shift["online"] += float(bdown.get("online", 0) or 0)
+                                    current_shift["debito"] += float(bdown.get("debito", 0) or 0)
+                                except Exception:
+                                    pass
+                        elif "online" in v_method:
+                            current_shift["online"] += v_total
+                        elif "debito" in v_method or "débito" in v_method:
+                            current_shift["debito"] += v_total
                         elif "transferencia" in v_method or "mercado" in v_method:
                             current_shift["transferencia"] += v_total
                         else:
@@ -511,6 +531,8 @@ class ModulesExtractor:
                 day_salidas = sum(s["salidas"] for s in shifts)
                 day_efectivo = sum(s["efectivo"] for s in shifts)
                 day_transf = sum(s["transferencia"] for s in shifts)
+                day_online = sum(s["online"] for s in shifts)
+                day_debito = sum(s["debito"] for s in shifts)
                 day_mixto = sum(s["mixto"] for s in shifts)
                 
                 report.append({
@@ -520,6 +542,8 @@ class ModulesExtractor:
                     "neto_dia": day_ingresos - day_salidas,
                     "efectivo": day_efectivo,
                     "transferencia": day_transf,
+                    "online": day_online,
+                    "debito": day_debito,
                     "mixto": day_mixto,
                     "shifts": shifts
                 })
@@ -528,6 +552,47 @@ class ModulesExtractor:
         except Exception as e:
             print("Error in get_caja_report:", str(e))
             return []
+
+    @staticmethod
+    def add_caja_movimiento(db: Session, data: dict):
+        try:
+            movement_type = data.get("movement_type")
+            amount = data.get("amount", 0)
+            payment_method = data.get("payment_method", "")
+            movement_date = data.get("movement_date")
+            employee_id = data.get("employee_id")
+            employee_name = data.get("employee_name", "")
+            notes = data.get("notes", "")
+            source_type = data.get("source_type", "")
+            source_id = data.get("source_id")
+
+            query = text("""
+                INSERT INTO caja_movimientos (
+                    movement_type, amount, payment_method, movement_date,
+                    employee_id, employee_name, notes, created_at, source_type, source_id
+                ) VALUES (
+                    :movement_type, :amount, :payment_method, :movement_date,
+                    :employee_id, :employee_name, :notes, NOW(), :source_type, :source_id
+                ) RETURNING id
+            """)
+            
+            result = db.execute(query, {
+                "movement_type": movement_type,
+                "amount": amount,
+                "payment_method": payment_method,
+                "movement_date": movement_date,
+                "employee_id": employee_id,
+                "employee_name": employee_name,
+                "notes": notes,
+                "source_type": source_type,
+                "source_id": source_id
+            })
+            db.commit()
+            return {"success": True, "id": result.scalar()}
+        except Exception as e:
+            db.rollback()
+            print("Error adding caja movimiento:", str(e))
+            return {"success": False, "error": str(e)}
 
     @staticmethod
     def get_repartidores(db: Session):
@@ -839,3 +904,185 @@ class ModulesExtractor:
                 "stock_levels": [],
                 "product_sales": []
             }
+
+    @staticmethod
+    def get_usuarios(db: Session):
+        try:
+            query = text("""
+                SELECT id, username, role, active, created_at, last_login_at, empleado_id
+                FROM usuarios
+                ORDER BY created_at DESC
+            """)
+            result = db.execute(query).fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "username": r[1],
+                    "role": r[2],
+                    "active": bool(r[3]),
+                    "created_at": str(r[4]) if r[4] else None,
+                    "last_login_at": str(r[5]) if r[5] else None,
+                    "empleado_id": r[6]
+                } for r in result
+            ]
+        except Exception as e:
+            print("Error in get_usuarios:", str(e))
+            return []
+
+    @staticmethod
+    def create_usuario(db: Session, data: dict):
+        try:
+            import bcrypt
+            password = data.get("password", "")
+            salt = bcrypt.gensalt()
+            hashed = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+            
+            query = text("""
+                INSERT INTO usuarios (
+                    username, password_hash, role, active, created_at, force_password_change
+                ) VALUES (
+                    :username, :password_hash, :role, :active, NOW(), FALSE
+                ) RETURNING id
+            """)
+            result = db.execute(query, {
+                "username": data.get("username"),
+                "password_hash": hashed,
+                "role": data.get("role", "cajero"),
+                "active": data.get("active", True)
+            })
+            db.commit()
+            return {"success": True, "id": result.scalar()}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def update_usuario_password(db: Session, user_id: int, new_password: str):
+        try:
+            import bcrypt
+            salt = bcrypt.gensalt()
+            hashed = bcrypt.hashpw(new_password.encode('utf-8'), salt).decode('utf-8')
+            
+            query = text("""
+                UPDATE usuarios
+                SET password_hash = :password_hash, updated_at = NOW()
+                WHERE id = :id
+            """)
+            db.execute(query, {"password_hash": hashed, "id": user_id})
+            db.commit()
+            return {"success": True}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def toggle_usuario_status(db: Session, user_id: int, active: bool):
+        try:
+            query = text("""
+                UPDATE usuarios
+                SET active = :active, updated_at = NOW()
+                WHERE id = :id
+            """)
+            db.execute(query, {"active": active, "id": user_id})
+            db.commit()
+            return {"success": True}
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def get_audit_logs(db: Session, limit: int = 100):
+        try:
+            query = text("""
+                SELECT id, created_at, actor_username, actor_role, module_name, action_name, 
+                       entity_type, entity_id, ip_address, terminal_name, payload_json,
+                       request_method, request_path
+                FROM system_access_audit_logs
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """)
+            result = db.execute(query, {"limit": limit}).fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "created_at": str(r[1]) if r[1] else None,
+                    "actor_username": r[2],
+                    "actor_role": r[3],
+                    "module_name": r[4],
+                    "action_name": r[5],
+                    "entity_type": r[6],
+                    "entity_id": str(r[7]),
+                    "ip_address": r[8],
+                    "terminal_name": r[9],
+                    "payload_json": r[10],
+                    "request_method": r[11],
+                    "request_path": r[12]
+                } for r in result
+            ]
+        except Exception as e:
+            print("Error in get_audit_logs:", str(e))
+            return []
+
+    @staticmethod
+    def get_active_pedidos(db: Session):
+        try:
+            query = text("""
+                SELECT id, status, customer_name, order_type, created_at, notes, total, payment_method, archived
+                FROM pedidos
+                ORDER BY created_at ASC
+            """)
+            res = db.execute(query).fetchall()
+            
+            pedidos = []
+            for r in res:
+                # Add safety checks
+                if r[1] not in ('Pendiente', 'Preparando', 'Listo'):
+                    continue
+                    
+                pid = r[0]
+                status = r[1]
+                
+                # Fetch items
+                items_query = text("""
+                    SELECT product_name, quantity, price
+                    FROM detalle_pedidos
+                    WHERE pedido_id = :pid
+                """)
+                items_res = db.execute(items_query, {"pid": pid}).fetchall()
+                
+                # Assume Prioritario for all since we don't know the schema perfectly
+                items = [{"name": i[0], "product_name": i[0], "quantity": int(i[1] or 1), "price": float(i[2] or 0), "routing_type": "Prioritario"} for i in items_res]
+                
+                # Format to match frontend expectations
+                pedidos.append({
+                    "id": pid,
+                    "state": status,
+                    "status": status,
+                    "total": float(r[6] or 0),
+                    "payment_method": r[7] or "",
+                    "client_name": r[2] or "",
+                    "customer_name": r[2] or "",
+                    "order_type": r[3] or "mostrador",
+                    "created_at": str(r[4]) if r[4] else None,
+                    "order_time": str(r[4]) if r[4] else None,
+                    "notes": r[5] or "",
+                    "archived": False,
+                    "items": items,
+                    "kitchen_tickets": {
+                        "kitchen1": {
+                            "visible": True,
+                            "status": "active",
+                            "items": [item for item in items if item["routing_type"] != 'Secundario']
+                        },
+                        "kitchen2": {
+                            "visible": True,
+                            "status": "active",
+                            "items": [item for item in items if item["routing_type"] == 'Secundario']
+                        }
+                    }
+                })
+            return pedidos
+        except Exception as e:
+            print("Error getting active pedidos:", e)
+            return []
+

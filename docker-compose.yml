@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: central-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Como Cloudflare Tunnel estará corriendo localmente en el host (VPS), 
+      # el backend puede conectarse a host.docker.internal si cloudflared expone el puerto allí
+      # o directamente a la IP local del VPS en la VPN.
+      - DATABASE_URL=postgresql://yummy_app:YummyDb2026!@172.17.0.1:5432/yummy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: central-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

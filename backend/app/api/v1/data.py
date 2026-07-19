@@ -115,33 +115,20 @@ def get_repartidor_history(id: int, db: Session = Depends(deps.get_db)):
 
 @router.get("/schema_dump")
 def dump_schema(db: Session = Depends(deps.get_db)):
-    from sqlalchemy import text
     try:
-        query = text("SELECT id, employee_id, event_type, amount, notes, event_date FROM empleado_novedades ORDER BY id DESC LIMIT 50")
-        res = db.execute(query).fetchall()
-        return [dict(r._mapping) for r in res]
+        from app.services.extractor_modules import ModulesExtractor
+        res = ModulesExtractor.get_active_pedidos(db)
+        return res
     except Exception as e:
         return {"error": str(e)}
-
-import urllib.request
-import json
 
 @router.get("/cocina/pedidos")
 def get_cocina_pedidos(db: Session = Depends(deps.get_db)):
     try:
-        req = urllib.request.Request("http://localhost:8080/api/v1/data/cocina/pedidos")
-        install = db.query(YummyInstallation).first()
-        integration_key = install.api_key if install else ""
-        if integration_key:
-            req.add_header("X-Integration-Key", integration_key)
-
-        with urllib.request.urlopen(req, timeout=5) as response:
-            if response.status == 200:
-                data = response.read().decode('utf-8')
-                parsed = json.loads(data)
-                return parsed
-        return []
-    except Exception:
+        from app.services.extractor_modules import ModulesExtractor
+        return ModulesExtractor.get_active_pedidos(db)
+    except Exception as e:
+        print("Error fetching pedidos:", e)
         return []
 
 @router.get("/cocina/config")
@@ -172,6 +159,20 @@ def update_cocina_state(order_id: int, kitchen_key: str, data: dict):
             return json.loads(resp_data)
     except Exception:
         return {}
+
+from pydantic import BaseModel
+from typing import Optional
+
+class CajaMovimientoData(BaseModel):
+    movement_type: str
+    amount: float
+    payment_method: str = "efectivo"
+    movement_date: str
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = ""
+    notes: Optional[str] = ""
+    source_type: Optional[str] = ""
+    source_id: Optional[int] = None
 
 from fastapi import Request, Depends
 from sqlalchemy.orm import Session
@@ -226,3 +227,79 @@ async def cancel_pedido(order_id: int, request: Request, db: Session = Depends(d
     except Exception as e:
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/caja/movimiento")
+async def add_caja_movimiento(data: CajaMovimientoData, request: Request, db: Session = Depends(deps.get_db)):
+    try:
+        import urllib.request
+        import json
+        
+        # Prepare the payload
+        payload = data.dict(exclude_none=True)
+        encoded_data = json.dumps(payload).encode('utf-8')
+        
+        # Forward to Yummy Backend
+        req = urllib.request.Request(
+            "http://localhost:8080/api/caja/movimientos",
+            data=encoded_data,
+            method="POST"
+        )
+        req.add_header('Content-Type', 'application/json')
+        
+        # Add integration key if exists
+        install = db.query(YummyInstallation).first()
+        integration_key = install.api_key if install else ""
+        if integration_key:
+            req.add_header("X-Integration-Key", integration_key)
+            
+        with urllib.request.urlopen(req, timeout=10) as response:
+            resp_data = response.read().decode('utf-8')
+            return json.loads(resp_data)
+            
+    except urllib.error.HTTPError as e:
+        from fastapi import HTTPException
+        err_detail = e.read().decode('utf-8')
+        raise HTTPException(status_code=e.code, detail=err_detail)
+    except Exception as e:
+        from fastapi import HTTPException
+        # Fallback to direct DB insert if Yummy API is unreachable
+        from app.services.extractor_modules import ModulesExtractor
+        print("Fallback to DB insert due to API error:", str(e))
+        result = ModulesExtractor.add_caja_movimiento(db, data.dict())
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Error insertando movimiento de caja (Fallback)"))
+        return {"message": "Movimiento registrado (Fallback)", "id": result.get("id")}
+
+class UsuarioData(BaseModel):
+    username: str
+    password: str = ""
+    role: str = "cajero"
+    active: bool = True
+
+@router.get("/usuarios")
+def get_usuarios(db: Session = Depends(deps.get_db)):
+    return ModulesExtractor.get_usuarios(db)
+
+@router.post("/usuarios")
+def create_usuario(data: UsuarioData, db: Session = Depends(deps.get_db)):
+    return ModulesExtractor.create_usuario(db, data.dict())
+
+@router.put("/usuarios/{user_id}/password")
+def update_usuario_password(user_id: int, data: dict, db: Session = Depends(deps.get_db)):
+    password = data.get("password")
+    if not password:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Password is required")
+    return ModulesExtractor.update_usuario_password(db, user_id, password)
+
+@router.put("/usuarios/{user_id}/status")
+def toggle_usuario_status(user_id: int, data: dict, db: Session = Depends(deps.get_db)):
+    active = data.get("active")
+    if active is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Active status is required")
+    return ModulesExtractor.toggle_usuario_status(db, user_id, bool(active))
+
+@router.get("/audit-logs")
+def get_audit_logs(db: Session = Depends(deps.get_db)):
+    return ModulesExtractor.get_audit_logs(db)
