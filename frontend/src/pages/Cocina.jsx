@@ -12,7 +12,7 @@ export default function Cocina() {
 
   const fetchConfig = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/cocina/config`, {
+      const res = await fetch('/api/v1/data/cocina/config', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -26,7 +26,7 @@ export default function Cocina() {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/cocina/pedidos?t=${Date.now()}`, {
+      const res = await fetch(`/api/v1/data/cocina/pedidos?t=${Date.now()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -49,7 +49,7 @@ export default function Cocina() {
 
   const markDone = async (orderId, kitchenKey) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/cocina/comandas/${orderId}/${kitchenKey}/state`, {
+      const res = await fetch(`/api/v1/data/cocina/comandas/${orderId}/${kitchenKey}/state`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
