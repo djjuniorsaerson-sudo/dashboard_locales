@@ -10,7 +10,7 @@ export const AuthProvider = ({ children }) => {
 
   const fetchLocations = async (currentToken) => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/yummy-installations/', {
+      const res = await fetch(`/api/v1/yummy-installations/`, {
         headers: { 'Authorization': `Bearer ${currentToken}` }
       });
       if (res.ok) {

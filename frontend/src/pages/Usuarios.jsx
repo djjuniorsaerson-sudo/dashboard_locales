@@ -16,7 +16,7 @@ export default function Usuarios({ token }) {
   const fetchUsuarios = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/usuarios', {
+      const res = await fetch(`/api/v1/data/usuarios`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -37,7 +37,7 @@ export default function Usuarios({ token }) {
   const handleCreateUsuario = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/usuarios', {
+      const res = await fetch(`/api/v1/data/usuarios`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -62,7 +62,7 @@ export default function Usuarios({ token }) {
     e.preventDefault();
     if (!selectedUser) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/usuarios/${selectedUser.id}/password`, {
+      const res = await fetch(`/api/v1/data/usuarios/${selectedUser.id}/password`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -89,7 +89,7 @@ export default function Usuarios({ token }) {
     if (!window.confirm(`¿Seguro que deseas ${newStatus ? 'activar' : 'desactivar'} al usuario ${user.username}?`)) return;
     
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/usuarios/${user.id}/status`, {
+      const res = await fetch(`/api/v1/data/usuarios/${user.id}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

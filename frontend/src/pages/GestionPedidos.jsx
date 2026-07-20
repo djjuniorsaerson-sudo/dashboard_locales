@@ -12,7 +12,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/cocina/pedidos`, {
+      const res = await fetch(`/api/v1/data/cocina/pedidos`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'X-Integration-Key': currentLocation?.api_key || '' 
@@ -50,7 +50,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
     setOrders(orders.filter(o => o.id !== orderId));
 
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/pedidos/${orderId}/cancel`, {
+      const res = await fetch(`/api/v1/data/pedidos/${orderId}/cancel`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,

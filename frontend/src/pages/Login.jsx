@@ -16,7 +16,7 @@ export default function Login() {
         formData.append('username', email);
         formData.append('password', password);
 
-        const res = await fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+        const res = await fetch('/api/v1/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: formData
@@ -29,7 +29,7 @@ export default function Login() {
         const data = await res.json();
         
         // Obtenemos info del usuario
-        const userRes = await fetch('http://127.0.0.1:8000/api/v1/auth/me', {
+        const userRes = await fetch('/api/v1/auth/me', {
           headers: { 'Authorization': `Bearer ${data.access_token}` }
         });
         const userData = await userRes.json();

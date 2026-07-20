@@ -11,11 +11,10 @@ for filepath in files:
     
     def replacer(match):
         path = match.group(2)
-        # return string with backticks
-        return f'`http://${{window.location.hostname}}:8000{path}`'
+        return f'`/api{path}`'
 
-    # Match 'http://localhost:8000/any/path' or "http://localhost:8000/any/path"
-    new_content = re.sub(r'([\'"])http://localhost:8000([^\'"]*)\1', replacer, content)
+    # Match 'http://localhost:8000/api/any/path' or "http://localhost:8000/api/any/path"
+    new_content = re.sub(r'([\'"`])http://localhost:8000/api([^\'"`]*)\1', replacer, content)
     
     if content != new_content:
         with open(filepath, 'w', encoding='utf-8') as f:

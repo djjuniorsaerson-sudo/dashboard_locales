@@ -18,7 +18,7 @@ export default function Empleados() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/employees', {
+      const res = await fetch(`/api/v1/data/employees`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -34,7 +34,7 @@ export default function Empleados() {
 
   const fetchNovedades = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/employees/novedades', {
+      const res = await fetch(`/api/v1/data/employees/novedades`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -69,7 +69,7 @@ export default function Empleados() {
     setIsSaving(true);
     
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/employees/${selectedEmployee.id}/novedad`, {
+      const res = await fetch(`/api/v1/data/employees/${selectedEmployee.id}/novedad`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,

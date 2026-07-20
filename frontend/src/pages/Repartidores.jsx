@@ -16,7 +16,7 @@ export default function Repartidores() {
   useEffect(() => {
     const fetchRepartidores = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/v1/data/repartidores', {
+        const res = await fetch(`/api/v1/data/repartidores`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -31,7 +31,7 @@ export default function Repartidores() {
     
     const fetchGlobalHistory = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/v1/data/repartidores/history', {
+        const res = await fetch(`/api/v1/data/repartidores/history`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -56,7 +56,7 @@ export default function Repartidores() {
     setHistoryModalOpen(true);
     setLoadingHistory(true);
     try {
-        const res = await fetch(`http://localhost:8000/api/v1/data/repartidor/${driver.id}/history`, {
+        const res = await fetch(`/api/v1/data/repartidor/${driver.id}/history`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {

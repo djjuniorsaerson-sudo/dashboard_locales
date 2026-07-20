@@ -17,7 +17,7 @@ export default function Products() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/products', {
+      const res = await fetch(`/api/v1/data/products`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -57,8 +57,8 @@ export default function Products() {
     setIsSaving(true);
     
     const url = editingProduct 
-      ? `http://localhost:8000/api/v1/data/products/${editingProduct.id}`
-      : 'http://localhost:8000/api/v1/data/products';
+      ? `/api/v1/data/products/${editingProduct.id}`
+      : `/api/v1/data/products`;
       
     const method = editingProduct ? 'PUT' : 'POST';
 
@@ -90,7 +90,7 @@ export default function Products() {
     if (!window.confirm(`¿Estás seguro de que quieres eliminar DEFINITIVAMENTE el producto "${name}"? Esto afectará a la base de datos de Yummy.`)) return;
     
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/products/${id}`, {
+      const res = await fetch(`/api/v1/data/products/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -117,7 +117,7 @@ export default function Products() {
     }
 
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/products/${p.id}`, {
+      const res = await fetch(`/api/v1/data/products/${p.id}`, {
         method: 'PUT',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -140,7 +140,7 @@ export default function Products() {
   const saveOrder = async (newProductsList) => {
     try {
       const orderedIds = newProductsList.map(p => p.id);
-      await fetch(`http://localhost:8000/api/v1/data/products/reorder`, {
+      await fetch(`/api/v1/data/products/reorder`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,

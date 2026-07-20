@@ -22,7 +22,7 @@ export default function Caja() {
 
   const fetchCaja = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/caja/report', {
+      const res = await fetch(`/api/v1/data/caja/report`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -41,7 +41,7 @@ export default function Caja() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/employees', {
+      const res = await fetch(`/api/v1/data/employees`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -97,7 +97,7 @@ export default function Caja() {
         employee_name: formData.employee_name
       };
 
-      const res = await fetch('http://localhost:8000/api/v1/data/caja/movimiento', {
+      const res = await fetch(`/api/v1/data/caja/movimiento`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

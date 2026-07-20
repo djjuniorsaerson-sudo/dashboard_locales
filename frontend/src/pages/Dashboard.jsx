@@ -21,7 +21,7 @@ export default function Dashboard({ setIsSyncing }) {
     if (!isBackground) setLoading(true);
     if (setIsSyncing) setIsSyncing(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/dashboard/metrics`, {
+      const res = await fetch(`/api/v1/data/dashboard/metrics`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -69,7 +69,7 @@ export default function Dashboard({ setIsSyncing }) {
 
     setIsSavingStock(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/products/${selectedStockItem.id}/stock`, {
+      const res = await fetch(`/api/v1/data/products/${selectedStockItem.id}/stock`, {
         method: 'PATCH',
         headers: { 
           'Authorization': `Bearer ${token}`,

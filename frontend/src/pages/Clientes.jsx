@@ -23,7 +23,7 @@ export default function Clientes() {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/clients', {
+      const res = await fetch(`/api/v1/data/clients`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -65,8 +65,8 @@ export default function Clientes() {
     
     try {
       const url = editingClient 
-        ? `http://localhost:8000/api/v1/data/clients/${editingClient.id}`
-        : 'http://localhost:8000/api/v1/data/clients';
+        ? `/api/v1/data/clients/${editingClient.id}`
+        : `/api/v1/data/clients`;
         
       const method = editingClient ? 'PUT' : 'POST';
 
@@ -99,7 +99,7 @@ export default function Clientes() {
     }
 
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/clients/${clientId}`, {
+      const res = await fetch(`/api/v1/data/clients/${clientId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

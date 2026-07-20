@@ -22,7 +22,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/v1/data/products', {
+    fetch(`/api/v1/data/products`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(res => res.json())
@@ -33,7 +33,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const saveOrder = async (newProductsList) => {
     try {
       const orderedIds = newProductsList.map(p => p.id);
-      await fetch(`http://localhost:8000/api/v1/data/products/reorder`, {
+      await fetch(`/api/v1/data/products/reorder`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -93,7 +93,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const handlePhoneBlur = async () => {
     if (!phone) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/data/client/${phone}`, {
+      const res = await fetch(`/api/v1/data/client/${phone}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -251,7 +251,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
 
     try {
       const isEdit = !!orderToEdit;
-      const url = isEdit ? `http://localhost:8000/api/v1/data/pedidos/${orderToEdit.id}` : 'http://localhost:8000/api/v1/orders/create';
+      const url = isEdit ? `/api/v1/data/pedidos/${orderToEdit.id}` : `/api/v1/orders/create`;
       const method = isEdit ? 'PUT' : 'POST';
 
       const res = await fetch(url, {

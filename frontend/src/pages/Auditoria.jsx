@@ -9,7 +9,7 @@ export default function Auditoria({ token }) {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/v1/data/audit-logs', {
+      const res = await fetch(`/api/v1/data/audit-logs`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {

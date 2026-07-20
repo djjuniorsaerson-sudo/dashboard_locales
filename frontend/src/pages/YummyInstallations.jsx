@@ -15,7 +15,7 @@ export default function YummyInstallations() {
 
   const fetchInstallations = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/yummy-installations/', {
+      const res = await fetch(`/api/v1/yummy-installations/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -56,7 +56,7 @@ export default function YummyInstallations() {
 
     try {
       // 1. Registrar
-      const registerRes = await fetch('http://localhost:8000/api/v1/yummy-installations/', {
+      const registerRes = await fetch(`/api/v1/yummy-installations/`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -88,7 +88,7 @@ export default function YummyInstallations() {
 
   const handleTestConnection = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/yummy-installations/${id}/test-connection`, {
+      const res = await fetch(`/api/v1/yummy-installations/${id}/test-connection`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -110,7 +110,7 @@ export default function YummyInstallations() {
     if(!confirm("¿Importar todo el snapshot desde YUMMY? Esto puede tardar.")) return;
     
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/yummy-installations/${id}/sync-snapshot`, {
+      const res = await fetch(`/api/v1/yummy-installations/${id}/sync-snapshot`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -128,7 +128,7 @@ export default function YummyInstallations() {
 
   const handleViewEvents = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/yummy-installations/${id}/events`, {
+      const res = await fetch(`/api/v1/yummy-installations/${id}/events`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
