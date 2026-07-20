@@ -12,7 +12,7 @@ services:
     volumes:
       - central_data:/var/lib/postgresql/data
 
-  api:
+  core_api:
     build: 
       context: ./backend
       dockerfile: Dockerfile
@@ -33,7 +33,7 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - api
+      - core_api
 
 volumes:
   central_data:
