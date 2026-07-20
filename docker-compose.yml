@@ -1,6 +1,17 @@
 version: '3.8'
 
 services:
+  central-db:
+    image: postgres:15-alpine
+    container_name: central-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: central_admin
+      POSTGRES_PASSWORD: central_password_123
+      POSTGRES_DB: central_db
+    volumes:
+      - central_data:/var/lib/postgresql/data
+
   backend:
     build: 
       context: ./backend
@@ -8,10 +19,11 @@ services:
     container_name: central-backend
     restart: unless-stopped
     environment:
-      # Como Cloudflare Tunnel estará corriendo localmente en el host (VPS), 
-      # el backend puede conectarse a host.docker.internal si cloudflared expone el puerto allí
-      # o directamente a la IP local del VPS en la VPN.
-      - DATABASE_URL=postgresql://yummy_app:YummyDb2026!@172.17.0.1:5432/yummy
+      - DATABASE_URL=postgresql://central_admin:central_password_123@central-db:5432/central_db
+      # URL de la base de datos de Yummy (El local/cliente). Para Tailscale, usa la IP de Tailscale. Para Cloudflare TCP o Ngrok, usa la URL proporcionada.
+      - YUMMY_DB_URL=postgresql://yummy_app:YummyDb2026!@localhost:5432/yummy
+    depends_on:
+      - central-db
 
   frontend:
     build:
@@ -23,3 +35,6 @@ services:
       - "3000:80"
     depends_on:
       - backend
+
+volumes:
+  central_data:

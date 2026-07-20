@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, YummySessionLocal
 from app.core.config import settings
 from app.core.security import ALGORITHM
 from app.schemas.user import TokenPayload
@@ -17,6 +17,13 @@ reusable_oauth2 = OAuth2PasswordBearer(
 def get_db() -> Generator:
     try:
         db = SessionLocal()
+        yield db
+    finally:
+        db.close()
+
+def get_yummy_db() -> Generator:
+    try:
+        db = YummySessionLocal()
         yield db
     finally:
         db.close()

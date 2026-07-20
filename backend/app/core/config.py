@@ -9,5 +9,6 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
     
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://yummy_app:YummyDb2026!@localhost:5432/yummy")
+    YUMMY_DB_URL: str = os.getenv("YUMMY_DB_URL", "postgresql://yummy_app:YummyDb2026!@localhost:5432/yummy")
 
 settings = Settings()
