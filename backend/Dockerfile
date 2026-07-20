@@ -10,9 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Luego el resto del código
 COPY . .
 
-# Copiar script de inicio
-COPY start.sh .
-RUN chmod +x start.sh
-
 # Comando de inicio
-CMD ["./start.sh"]
+CMD ["/bin/sh", "-c", "sleep 5 && python create_db.py && python create_admin.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
