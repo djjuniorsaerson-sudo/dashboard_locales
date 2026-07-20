@@ -24,11 +24,11 @@ services:
     depends_on:
       - central-db
 
-  web:
+  core_web:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: central-web
+    container_name: central-core-web
     restart: unless-stopped
     ports:
       - "3000:80"

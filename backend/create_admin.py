@@ -15,7 +15,9 @@ def create_admin():
     # Ver si ya existe
     existing_user = db.query(User).filter(User.email == "admin@empresa.com").first()
     if existing_user:
-        print("Admin user already exists!")
+        print("Admin user already exists! Forcing password reset to 'admin'")
+        existing_user.password_hash = get_password_hash("admin")
+        db.commit()
         db.close()
         return
 
