@@ -16,7 +16,7 @@ services:
     build: 
       context: ./backend
       dockerfile: Dockerfile
-    container_name: central-api
+    container_name: central-core-api
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://central_admin:central_password_123@central-db:5432/central_db
