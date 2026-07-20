@@ -12,31 +12,28 @@ services:
     volumes:
       - central_data:/var/lib/postgresql/data
 
-  backend:
+  api:
     build: 
       context: ./backend
       dockerfile: Dockerfile
-    image: central-backend:v2
-    container_name: central-backend
+    container_name: central-api
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://central_admin:central_password_123@central-db:5432/central_db
-      # URL de la base de datos de Yummy (El local/cliente). Para Tailscale, usa la IP de Tailscale. Para Cloudflare TCP o Ngrok, usa la URL proporcionada.
       - YUMMY_DB_URL=postgresql://yummy_app:YummyDb2026!@localhost:5432/yummy
     depends_on:
       - central-db
 
-  frontend:
+  web:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: central-frontend:v2
-    container_name: central-frontend
+    container_name: central-web
     restart: unless-stopped
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      - api
 
 volumes:
   central_data:
