@@ -22,11 +22,22 @@ def get_db() -> Generator:
         db.close()
 
 def get_yummy_db() -> Generator:
+    from sqlalchemy import text
+    if YummySessionLocal is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Yummy module is not configured or unavailable")
+    
+    db = None
     try:
         db = YummySessionLocal()
+        # Optional: Test the connection briefly
+        db.execute(text("SELECT 1"))
         yield db
+    except Exception as e:
+        print(f"Yummy DB connection error: {e}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Yummy database connection failed")
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
 def get_current_user(
     db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)

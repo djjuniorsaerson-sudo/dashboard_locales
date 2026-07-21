@@ -5,5 +5,12 @@ from app.core.config import settings
 engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-yummy_engine = create_engine(settings.YUMMY_DB_URL, pool_pre_ping=True)
-YummySessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=yummy_engine)
+yummy_engine = None
+YummySessionLocal = None
+
+if settings.YUMMY_DB_URL:
+    try:
+        yummy_engine = create_engine(settings.YUMMY_DB_URL, pool_pre_ping=True)
+        YummySessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=yummy_engine)
+    except Exception as e:
+        print(f"Warning: Could not initialize Yummy database connection: {e}")

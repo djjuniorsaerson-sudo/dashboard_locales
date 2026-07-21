@@ -12,11 +12,12 @@ services:
     volumes:
       - central_data:/var/lib/postgresql/data
 
-  core_api:
+  api:
     build: 
       context: ./backend
       dockerfile: Dockerfile
-    container_name: central-core-api
+    image: central-api:v5
+    container_name: central-api
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://central_admin:central_password_123@central-db:5432/central_db
@@ -24,16 +25,17 @@ services:
     depends_on:
       - central-db
 
-  core_web:
+  web:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: central-core-web
+    image: central-web:v5
+    container_name: central-web
     restart: unless-stopped
     ports:
       - "3000:80"
     depends_on:
-      - core_api
+      - api
 
 volumes:
   central_data:
