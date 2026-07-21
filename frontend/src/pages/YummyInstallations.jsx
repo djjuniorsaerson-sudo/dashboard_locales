@@ -228,14 +228,6 @@ export default function YummyInstallations() {
               {errorMsg && <div className="bg-red-500/20 text-red-400 p-3 rounded mb-4 text-sm font-medium">{errorMsg}</div>}
               
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-400 mb-2">¿Qué tipo de programa deseas vincular?</label>
-                <select value={manualForm.program_type} onChange={e => setManualForm({...manualForm, program_type: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white text-sm focus:ring-blue-500 focus:border-blue-500 outline-none mb-6">
-                  <option value="yummy">Yummy POS (Punto de Venta Resto)</option>
-                  <option value="farmacia" disabled>Sistema de Farmacia (Próximamente)</option>
-                  <option value="taller" disabled>Gestión de Taller (Próximamente)</option>
-                  <option value="generico" disabled>Conector Genérico (Próximamente)</option>
-                </select>
-
                 <label className="block text-sm font-medium text-gray-400 mb-2">1. Pega el código de integración generado en el programa</label>
                 <textarea 
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-sm text-green-400 font-mono focus:ring-blue-500 focus:border-blue-500 outline-none h-32"
