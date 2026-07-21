@@ -10,7 +10,7 @@ export default function YummyInstallations() {
   const [errorMsg, setErrorMsg] = useState('');
   
   const [manualForm, setManualForm] = useState({
-    local_id: '', local_name: '', base_url: '', api_key: '', sync_mode: 'manual'
+    local_id: '', local_name: '', base_url: '', api_key: '', sync_mode: 'manual', program_type: 'yummy'
   });
 
   const fetchInstallations = async () => {
@@ -40,7 +40,8 @@ export default function YummyInstallations() {
         local_name: parsed.local_name || '',
         base_url: parsed.base_url || '',
         api_key: parsed.api_key || '',
-        sync_mode: parsed.sync_mode || 'manual'
+        sync_mode: parsed.sync_mode || 'manual',
+        program_type: manualForm.program_type
       });
     } catch (err) {
       // invalid json, ignore
@@ -69,7 +70,7 @@ export default function YummyInstallations() {
       const newInst = await registerRes.json();
       
       setShowModal(false);
-      setManualForm({ local_id: '', local_name: '', base_url: '', api_key: '', sync_mode: 'manual' });
+      setManualForm({ local_id: '', local_name: '', base_url: '', api_key: '', sync_mode: 'manual', program_type: 'yummy' });
       setJsonInput('');
       
       // Añadir provisoriamente a la vista
@@ -93,9 +94,9 @@ export default function YummyInstallations() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        alert("Conexión Exitosa con YUMMY");
+        alert("Conexión Exitosa con el Programa");
       } else {
-        alert("Fallo la conexión con YUMMY");
+        alert("Fallo la conexión con el Programa");
       }
       // Actualizar estado visual
       fetchInstallations();
@@ -107,7 +108,7 @@ export default function YummyInstallations() {
   };
 
   const handleSyncSnapshot = async (id) => {
-    if(!confirm("¿Importar todo el snapshot desde YUMMY? Esto puede tardar.")) return;
+    if(!confirm("¿Importar todo el snapshot desde el programa? Esto puede tardar.")) return;
     
     try {
       const res = await fetch(`/api/v1/yummy-installations/${id}/sync-snapshot`, {
@@ -146,8 +147,8 @@ export default function YummyInstallations() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-white">Instalaciones YUMMY</h2>
-          <p className="text-gray-400 text-sm mt-1">Vincula los sistemas locales (Puntos de Venta) con el panel central</p>
+          <h2 className="text-2xl font-bold text-white">Gestor de Locales y Conexiones</h2>
+          <p className="text-gray-400 text-sm mt-1">Vincula los sistemas locales (Puntos de Venta, Farmacias, etc.) con el panel central</p>
         </div>
         <button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-medium shadow-lg shadow-blue-500/30 transition-all flex items-center">
           <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
@@ -161,6 +162,7 @@ export default function YummyInstallations() {
             <div className="p-5 border-b border-gray-700/50 flex justify-between items-start">
               <div>
                 <h3 className="text-lg font-bold text-white">{inst.local_name}</h3>
+                <p className="text-xs text-gray-400 font-mono mt-1 bg-gray-700/50 inline-block px-2 py-0.5 rounded capitalize">{inst.program_type || 'yummy'}</p>
                 <p className="text-xs text-gray-500 font-mono mt-1">ID: {inst.local_id}</p>
               </div>
               <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
@@ -205,8 +207,8 @@ export default function YummyInstallations() {
         {installations.length === 0 && (
           <div className="col-span-full py-16 text-center border-2 border-dashed border-gray-700 rounded-2xl">
             <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
-            <h3 className="text-lg font-medium text-gray-400 mb-1">No hay instalaciones vinculadas</h3>
-            <p className="text-gray-500 text-sm max-w-sm mx-auto">Pega el JSON provisto por el sistema local de YUMMY para comenzar la sincronización.</p>
+            <h3 className="text-lg font-medium text-gray-400 mb-1">No hay programas vinculados</h3>
+            <p className="text-gray-500 text-sm max-w-sm mx-auto">Vincule un sistema local (como Yummy POS) para comenzar a recibir sus datos.</p>
           </div>
         )}
       </div>
@@ -216,7 +218,7 @@ export default function YummyInstallations() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-gray-800 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Vincular Local YUMMY</h3>
+              <h3 className="text-xl font-bold text-white">Vincular Nuevo Programa</h3>
               <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-white transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
@@ -226,7 +228,15 @@ export default function YummyInstallations() {
               {errorMsg && <div className="bg-red-500/20 text-red-400 p-3 rounded mb-4 text-sm font-medium">{errorMsg}</div>}
               
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-400 mb-2">1. Pega el JSON de integración generado en YUMMY</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">¿Qué tipo de programa deseas vincular?</label>
+                <select value={manualForm.program_type} onChange={e => setManualForm({...manualForm, program_type: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white text-sm focus:ring-blue-500 focus:border-blue-500 outline-none mb-6">
+                  <option value="yummy">Yummy POS (Punto de Venta Resto)</option>
+                  <option value="farmacia" disabled>Sistema de Farmacia (Próximamente)</option>
+                  <option value="taller" disabled>Gestión de Taller (Próximamente)</option>
+                  <option value="generico" disabled>Conector Genérico (Próximamente)</option>
+                </select>
+
+                <label className="block text-sm font-medium text-gray-400 mb-2">1. Pega el código de integración generado en el programa</label>
                 <textarea 
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-sm text-green-400 font-mono focus:ring-blue-500 focus:border-blue-500 outline-none h-32"
                   placeholder='{ "local_id": "...", "base_url": "..." }'
@@ -258,7 +268,7 @@ export default function YummyInstallations() {
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-gray-500 mb-1">URL Base (YUMMY)</label>
+                  <label className="block text-xs text-gray-500 mb-1">URL Base del Programa (Ej: IP de Tailscale)</label>
                   <input type="text" value={manualForm.base_url} onChange={e => setManualForm({...manualForm, base_url: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-white text-sm font-mono" placeholder="https://..." />
                 </div>
                 <div className="col-span-2">
