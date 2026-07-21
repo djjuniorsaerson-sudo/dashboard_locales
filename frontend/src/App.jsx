@@ -92,13 +92,13 @@ function MainLayout() {
               <button onClick={() => setCurrentView('clients')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'clients' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Clientes</button>
               <button onClick={() => setCurrentView('employees')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'employees' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Empleados</button>
               <button onClick={() => setCurrentView('repartidores')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'repartidores' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Repartidores</button>
+              <div className="pt-4 mt-2 border-t border-gray-800">
+                <span className="px-4 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Sistema</span>
+                <button onClick={() => setCurrentView('usuarios')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'usuarios' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Usuarios</button>
+                <button onClick={() => setCurrentView('auditoria')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'auditoria' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Auditoría</button>
+              </div>
             </div>
           )}
-          <div className="pt-4 mt-2 border-t border-gray-800">
-            <span className="px-4 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Sistema</span>
-            <button onClick={() => setCurrentView('usuarios')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'usuarios' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Usuarios</button>
-            <button onClick={() => setCurrentView('auditoria')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'auditoria' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Auditoría</button>
-          </div>
         </nav>
 
         <div className="p-4 border-t border-gray-800">
