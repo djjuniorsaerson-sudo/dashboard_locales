@@ -24,7 +24,13 @@ def get_db() -> Generator:
 class RemoteResult:
     def __init__(self, data):
         self.data = data
-        self.rows = data.get("rows", []) if isinstance(data, dict) else []
+        if isinstance(data, dict):
+            self.rows = data.get("rows", [])
+        elif isinstance(data, list):
+            # Fallback for older yummy instances that return list of dicts directly
+            self.rows = [list(r.values()) if isinstance(r, dict) else list(r) for r in data]
+        else:
+            self.rows = []
     def fetchall(self):
         return [tuple(r) for r in self.rows]
     def fetchone(self):
