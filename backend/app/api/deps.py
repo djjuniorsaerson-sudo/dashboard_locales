@@ -24,20 +24,20 @@ def get_db() -> Generator:
 class RemoteResult:
     def __init__(self, data):
         self.data = data
+        self.rows = data.get("rows", []) if isinstance(data, dict) else []
     def fetchall(self):
-        if not self.data or not isinstance(self.data, list): return []
-        return [tuple(row.values()) for row in self.data]
+        return [tuple(r) for r in self.rows]
     def fetchone(self):
-        if self.data and isinstance(self.data, list) and len(self.data) > 0:
-            return tuple(self.data[0].values())
+        if self.rows and len(self.rows) > 0:
+            return tuple(self.rows[0])
         return None
     def scalar(self):
         row = self.fetchone()
         return row[0] if row else None
     @property
     def lastrowid(self):
-        if self.data and isinstance(self.data, list) and len(self.data) > 0:
-            return self.data[0].get("lastrowid")
+        if isinstance(self.data, dict):
+            return self.data.get("lastrowid")
         return None
 
 class RemoteSession:
