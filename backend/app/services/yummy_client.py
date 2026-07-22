@@ -21,6 +21,12 @@ class YummyIntegrationClient:
         response.raise_for_status()
         return response.json()
 
+    def get_metrics(self):
+        url = f"{self.base_url}/api/integration/metrics"
+        response = requests.get(url, headers=self.headers, timeout=5)
+        response.raise_for_status()
+        return response.json()
+
     def get_export(self):
         url = f"{self.base_url}/api/integration/export"
         response = requests.get(url, headers=self.headers, timeout=10)

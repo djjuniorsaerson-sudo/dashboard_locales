@@ -120,8 +120,8 @@ def get_dashboard_metrics(db: Session = Depends(deps.get_db)):
     client = YummyIntegrationClient(install.base_url, install.api_key)
     try:
         # El endpoint remoto debe devolver el estado del dashboard local
-        status_data = client.get_status()
-        return status_data
+        metrics_data = client.get_metrics()
+        return metrics_data
     except Exception as e:
         print("Error fetching metrics from remote:", e)
         return {
