@@ -106,8 +106,28 @@ def get_global_repartidor_history(db: Session = Depends(deps.get_yummy_db)):
     return ModulesExtractor.get_global_repartidor_history(db)
 
 @router.get("/dashboard/metrics")
-def get_dashboard_metrics(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_dashboard_metrics(db)
+def get_dashboard_metrics(db: Session = Depends(deps.get_db)):
+    from app.models.yummy import YummyInstallation
+    from app.services.yummy_client import YummyIntegrationClient
+    
+    install = db.query(YummyInstallation).filter(YummyInstallation.connection_status == "ONLINE").first()
+    if not install:
+        return {
+            "ventas_turno": 0, "pedidos_activos": 0, "pedidos_finalizados": 0,
+            "product_sales": [], "stock_levels": []
+        }
+        
+    client = YummyIntegrationClient(install.base_url, install.api_key)
+    try:
+        # El endpoint remoto debe devolver el estado del dashboard local
+        status_data = client.get_status()
+        return status_data
+    except Exception as e:
+        print("Error fetching metrics from remote:", e)
+        return {
+            "ventas_turno": 0, "pedidos_activos": 0, "pedidos_finalizados": 0,
+            "product_sales": [], "stock_levels": []
+        }
 
 @router.get("/repartidor/{id}/history")
 def get_repartidor_history(id: int, db: Session = Depends(deps.get_yummy_db)):
