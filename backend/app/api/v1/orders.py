@@ -40,9 +40,12 @@ class OrderCreate(BaseModel):
 
 @router.post("/create")
 def create_order(order: OrderCreate):
-    # Enviar el pedido a la API local de Yummy
-    YUMMY_BASE_URL = "http://127.0.0.1:8080"
+    from app.api.v1.data import get_integration_client
     
+    client = get_integration_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Yummy Local no está conectado")
+        
     # Aseguramos el payment_breakdown para mixto
     if order.payment_method == "mixto" and not order.payment_breakdown:
         raise HTTPException(status_code=400, detail="Debe especificar payment_breakdown para pago mixto")
@@ -50,19 +53,7 @@ def create_order(order: OrderCreate):
     payload = order.dict()
     
     try:
-        response = requests.post(
-            f"{YUMMY_BASE_URL}/api/pedidos",
-            json=payload,
-            timeout=20
-        )
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"No pude conectar con Yummy en {YUMMY_BASE_URL}: {exc}")
-
-    if response.status_code >= 400:
-        try:
-            detail = response.json()
-        except Exception:
-            detail = response.text
-        raise HTTPException(status_code=response.status_code, detail=detail)
-
-    return response.json()
+        response = client.request("POST", "/api/pedidos", payload)
+        return response
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"No pude conectar con Yummy: {exc}")
