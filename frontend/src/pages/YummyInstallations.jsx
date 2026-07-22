@@ -155,10 +155,11 @@ export default function YummyInstallations() {
         fetchInstallations();
         fetchLocations(token);
       } else {
-        alert("Fallo al eliminar instalación");
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Fallo al eliminar instalación: ${errorData.detail || errorData.message || 'Error desconocido'}`);
       }
     } catch (e) {
-      alert("Error de red");
+      alert(`Error de red: ${e.message}`);
     }
   };
 

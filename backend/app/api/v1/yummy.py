@@ -91,10 +91,17 @@ def delete_installation(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
-    install = get_install_secure(db, id, current_user.organization_id)
-    db.delete(install)
-    db.commit()
-    return {"status": "success", "message": "Installation deleted"}
+    try:
+        install = get_install_secure(db, id, current_user.organization_id)
+        # Delete related snapshots first to avoid foreign key constraints
+        db.query(YummySnapshot).filter(YummySnapshot.installation_id == id).delete()
+        
+        db.delete(install)
+        db.commit()
+        return {"status": "success", "message": "Installation deleted"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{id}/test-connection")
 def test_connection(
