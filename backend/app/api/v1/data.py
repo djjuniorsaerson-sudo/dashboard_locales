@@ -6,6 +6,21 @@ from app.services.extractor_modules import ModulesExtractor
 router = APIRouter()
 
 from pydantic import BaseModel
+from typing import Optional
+
+def get_integration_client():
+    from app.db.session import SessionLocal
+    from app.models.yummy import YummyInstallation
+    from app.services.yummy_client import YummyIntegrationClient
+    
+    db = SessionLocal()
+    try:
+        install = db.query(YummyInstallation).filter(YummyInstallation.connection_status == "ONLINE").first()
+        if install:
+            return YummyIntegrationClient(install.base_url, install.api_key)
+        return None
+    finally:
+        db.close()
 
 class ProductData(BaseModel):
     name: str
@@ -154,29 +169,19 @@ def get_cocina_pedidos(db: Session = Depends(deps.get_yummy_db)):
 @router.get("/cocina/config")
 def get_cocina_config():
     try:
-        req = urllib.request.Request("http://localhost:8080/api/comandero/config")
-        with urllib.request.urlopen(req, timeout=5) as response:
-            if response.status == 200:
-                data = response.read().decode('utf-8')
-                parsed = json.loads(data)
-                return parsed.get('data', {}) if isinstance(parsed, dict) and 'data' in parsed else parsed
-        return {}
+        client = get_integration_client()
+        if not client: return {}
+        parsed = client.request("GET", "/api/comandero/config")
+        return parsed.get('data', {}) if isinstance(parsed, dict) and 'data' in parsed else parsed
     except Exception:
         return {}
 
 @router.put("/cocina/comandas/{order_id}/{kitchen_key}/state")
 def update_cocina_state(order_id: int, kitchen_key: str, data: dict):
     try:
-        encoded_data = json.dumps(data).encode('utf-8')
-        req = urllib.request.Request(
-            f"http://localhost:8080/api/comandas/{order_id}/{kitchen_key}/state",
-            data=encoded_data,
-            method="PUT"
-        )
-        req.add_header('Content-Type', 'application/json')
-        with urllib.request.urlopen(req, timeout=5) as response:
-            resp_data = response.read().decode('utf-8')
-            return json.loads(resp_data)
+        client = get_integration_client()
+        if not client: return {}
+        return client.request("PUT", f"/api/comandas/{order_id}/{kitchen_key}/state", payload=data)
     except Exception:
         return {}
 
@@ -200,95 +205,35 @@ from app.api import deps
 from app.models.yummy import YummyInstallation
 
 @router.put("/pedidos/{order_id}")
-async def update_pedido(order_id: int, request: Request, db: Session = Depends(deps.get_yummy_db)):
+async def update_pedido(order_id: int, request: Request):
     try:
         data = await request.json()
-        encoded_data = json.dumps(data).encode('utf-8')
-        req = urllib.request.Request(
-            f"http://localhost:8080/api/v1/data/pedidos/{order_id}",
-            data=encoded_data,
-            method="PUT"
-        )
-        req.add_header('Content-Type', 'application/json')
-        # Pasamos el integration key desde la BD
-        install = db.query(YummyInstallation).first()
-        integration_key = install.api_key if install else ""
-        if integration_key:
-            req.add_header("X-Integration-Key", integration_key)
-            
-        with urllib.request.urlopen(req, timeout=10) as response:
-            return json.loads(response.read().decode('utf-8'))
-    except urllib.error.HTTPError as e:
-        from fastapi import HTTPException
-        err_detail = e.read().decode('utf-8')
-        raise HTTPException(status_code=e.code, detail=err_detail)
+        client = get_integration_client()
+        if not client: return {}
+        return client.request("PUT", f"/api/v1/data/pedidos/{order_id}", payload=data)
     except Exception as e:
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/pedidos/{order_id}/cancel")
-async def cancel_pedido(order_id: int, request: Request, db: Session = Depends(deps.get_yummy_db)):
+async def cancel_pedido(order_id: int):
     try:
-        req = urllib.request.Request(
-            f"http://localhost:8080/api/v1/data/pedidos/{order_id}/cancel",
-            method="POST"
-        )
-        install = db.query(YummyInstallation).first()
-        integration_key = install.api_key if install else ""
-        if integration_key:
-            req.add_header("X-Integration-Key", integration_key)
-            
-        with urllib.request.urlopen(req, timeout=10) as response:
-            return json.loads(response.read().decode('utf-8'))
-    except urllib.error.HTTPError as e:
-        from fastapi import HTTPException
-        err_detail = e.read().decode('utf-8')
-        raise HTTPException(status_code=e.code, detail=err_detail)
+        client = get_integration_client()
+        if not client: return {}
+        return client.request("POST", f"/api/v1/data/pedidos/{order_id}/cancel")
     except Exception as e:
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/caja/movimiento")
-async def add_caja_movimiento(data: CajaMovimientoData, request: Request, db: Session = Depends(deps.get_yummy_db)):
+def add_caja_movimiento(data: CajaMovimientoData):
     try:
-        import urllib.request
-        import json
-        
-        # Prepare the payload
-        payload = data.dict(exclude_none=True)
-        encoded_data = json.dumps(payload).encode('utf-8')
-        
-        # Forward to Yummy Backend
-        req = urllib.request.Request(
-            "http://localhost:8080/api/caja/movimientos",
-            data=encoded_data,
-            method="POST"
-        )
-        req.add_header('Content-Type', 'application/json')
-        
-        # Add integration key if exists
-        install = db.query(YummyInstallation).first()
-        integration_key = install.api_key if install else ""
-        if integration_key:
-            req.add_header("X-Integration-Key", integration_key)
-            
-        with urllib.request.urlopen(req, timeout=10) as response:
-            resp_data = response.read().decode('utf-8')
-            return json.loads(resp_data)
-            
-    except urllib.error.HTTPError as e:
-        from fastapi import HTTPException
-        err_detail = e.read().decode('utf-8')
-        raise HTTPException(status_code=e.code, detail=err_detail)
+        client = get_integration_client()
+        if not client: return {}
+        return client.request("POST", "/api/caja/movimientos", payload=data.dict(exclude_none=True))
     except Exception as e:
         from fastapi import HTTPException
-        # Fallback to direct DB insert if Yummy API is unreachable
-        from app.services.extractor_modules import ModulesExtractor
-        print("Fallback to DB insert due to API error:", str(e))
-        result = ModulesExtractor.add_caja_movimiento(db, data.dict())
-        if not result.get("success"):
-            raise HTTPException(status_code=500, detail=result.get("error", "Error insertando movimiento de caja (Fallback)"))
-        return {"message": "Movimiento registrado (Fallback)", "id": result.get("id")}
+        raise HTTPException(status_code=500, detail=str(e))
 
 class UsuarioData(BaseModel):
     username: str
