@@ -15,7 +15,9 @@ def get_integration_client():
     
     db = SessionLocal()
     try:
-        install = db.query(YummyInstallation).filter(YummyInstallation.connection_status == "ONLINE").first()
+        install = db.query(YummyInstallation).filter(
+            YummyInstallation.connection_status == "ONLINE"
+        ).order_by(YummyInstallation.last_health_check.desc()).first()
         if install:
             return YummyIntegrationClient(install.base_url, install.api_key)
         return None

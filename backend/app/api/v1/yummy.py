@@ -85,6 +85,17 @@ def list_installations(
         "last_sync_at": i.last_sync_at
     } for i in installs]
 
+@router.delete("/{id}")
+def delete_installation(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    install = get_install_secure(db, id, current_user.organization_id)
+    db.delete(install)
+    db.commit()
+    return {"status": "success", "message": "Installation deleted"}
+
 @router.post("/{id}/test-connection")
 def test_connection(
     id: UUID,

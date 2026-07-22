@@ -143,6 +143,25 @@ export default function YummyInstallations() {
     }
   };
 
+  const handleDeleteInstallation = async (id) => {
+    if(!confirm("¿Estás seguro de eliminar esta instalación?")) return;
+    try {
+      const res = await fetch(`/api/v1/yummy-installations/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        alert("Instalación eliminada correctamente.");
+        fetchInstallations();
+        fetchLocations(token);
+      } else {
+        alert("Fallo al eliminar instalación");
+      }
+    } catch (e) {
+      alert("Error de red");
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-8">
@@ -198,8 +217,8 @@ export default function YummyInstallations() {
               <button onClick={() => handleViewEvents(inst.id)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs py-2 rounded font-medium border border-gray-600 transition-colors">
                 Ver Eventos
               </button>
-              <button className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs py-2 rounded font-medium border border-gray-600 transition-colors">
-                Auditoría
+              <button onClick={() => handleDeleteInstallation(inst.id)} className="bg-red-900/50 hover:bg-red-800 text-red-300 text-xs py-2 rounded font-medium border border-red-700/50 transition-colors">
+                Eliminar
               </button>
             </div>
           </div>
