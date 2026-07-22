@@ -15,6 +15,19 @@ class YummyIntegrationClient:
         response.raise_for_status()
         return response.json()
 
+    def request(self, method, path):
+        url = f"{self.base_url}{path}"
+        response = requests.request(method, url, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
+    def execute_sql(self, sql: str, params: dict = None):
+        url = f"{self.base_url}/api/integration/sql"
+        payload = {"sql": sql, "params": params or {}}
+        response = requests.post(url, headers=self.headers, json=payload, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
     def get_status(self):
         url = f"{self.base_url}/api/integration/status"
         response = requests.get(url, headers=self.headers, timeout=5)

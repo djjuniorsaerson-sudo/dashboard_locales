@@ -21,23 +21,60 @@ def get_db() -> Generator:
     finally:
         db.close()
 
+class RemoteResult:
+    def __init__(self, data):
+        self.data = data
+    def fetchall(self):
+        if not self.data or not isinstance(self.data, list): return []
+        return [tuple(row.values()) for row in self.data]
+    def fetchone(self):
+        if self.data and isinstance(self.data, list) and len(self.data) > 0:
+            return tuple(self.data[0].values())
+        return None
+    def scalar(self):
+        row = self.fetchone()
+        return row[0] if row else None
+    @property
+    def lastrowid(self):
+        if self.data and isinstance(self.data, list) and len(self.data) > 0:
+            return self.data[0].get("lastrowid")
+        return None
+
+class RemoteSession:
+    def __init__(self, client):
+        self.client = client
+    def execute(self, query, params=None):
+        import re
+        sql = str(query)
+        if hasattr(query, "text"):
+            sql = query.text
+        
+        p = params or {}
+        if not isinstance(p, dict) and hasattr(p, '__dict__'):
+            p = p.__dict__
+            
+        res = self.client.execute_sql(sql, p)
+        if isinstance(res, dict) and "error" in res:
+            raise Exception(res["error"])
+        return RemoteResult(res)
+    def commit(self): pass
+    def rollback(self): pass
+    def close(self): pass
+
 def get_yummy_db() -> Generator:
-    from sqlalchemy import text
-    if YummySessionLocal is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Yummy module is not configured or unavailable")
+    from app.models.yummy import YummyInstallation
+    from app.services.yummy_client import YummyIntegrationClient
     
-    db = None
+    db = SessionLocal()
     try:
-        db = YummySessionLocal()
-        # Optional: Test the connection briefly
-        db.execute(text("SELECT 1"))
-        yield db
-    except Exception as e:
-        print(f"Yummy DB connection error: {e}")
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Yummy database connection failed")
+        install = db.query(YummyInstallation).filter(YummyInstallation.connection_status == "ONLINE").first()
+        if install:
+            client = YummyIntegrationClient(install.base_url, install.api_key)
+            yield RemoteSession(client)
+        else:
+            raise HTTPException(status_code=503, detail="Yummy is not ONLINE")
     finally:
-        if db is not None:
-            db.close()
+        db.close()
 
 def get_current_user(
     db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
