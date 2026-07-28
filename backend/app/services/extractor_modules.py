@@ -627,10 +627,10 @@ class ModulesExtractor:
         query = text("""
             SELECT id, name, phone, address, notes
             FROM clientes
-            WHERE phone = :phone
+            WHERE phone = ?
             LIMIT 1
         """)
-        r = db.execute(query, {"phone": phone}).fetchone()
+        r = db.execute(query, [phone]).fetchone()
         if r:
             return {
                 "id": r[0],
