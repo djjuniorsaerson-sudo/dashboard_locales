@@ -59,6 +59,15 @@ class RemoteSession:
         if not isinstance(p, dict) and hasattr(p, '__dict__'):
             p = p.__dict__
             
+        if isinstance(p, dict) and p:
+            new_p = []
+            def replace_param(match):
+                key = match.group(1)
+                new_p.append(p.get(key))
+                return '?'
+            sql = re.sub(r'(?<!:):([a-zA-Z0-9_]+)', replace_param, sql)
+            p = new_p
+            
         res = self.client.execute_sql(sql, p)
         if isinstance(res, dict) and "error" in res:
             raise Exception(res["error"])
