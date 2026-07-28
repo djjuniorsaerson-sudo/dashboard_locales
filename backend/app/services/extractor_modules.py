@@ -400,6 +400,15 @@ class ModulesExtractor:
     @staticmethod
     def get_caja_report(db: Session):
         # Extraemos los días únicos de movimientos y ventas
+        def normalize_datetime(dt_str):
+            if not dt_str: return None
+            try:
+                from dateutil import parser
+                d = parser.parse(str(dt_str))
+                return d.strftime("%Y-%m-%dT%H:%M:%S")
+            except Exception:
+                return str(dt_str)
+
         try:
             days_query = text("""
                 SELECT DISTINCT DATE(created_at) as d 
@@ -414,25 +423,30 @@ class ModulesExtractor:
             
             report = []
             for day_row in days_res:
-                day_str = str(day_row[0])
+                raw_day = str(day_row[0])
+                try:
+                    from dateutil import parser
+                    day_str = parser.parse(raw_day).strftime("%Y-%m-%d")
+                except:
+                    day_str = raw_day
                 
                 # Movimientos del día ordenados cronológicamente
                 mov_query = text("""
                     SELECT id, movement_type, amount, created_at, notes
                     FROM caja_movimientos
-                    WHERE DATE(created_at) = :day
+                    WHERE DATE(created_at) = ?
                     ORDER BY created_at ASC
                 """)
-                movs = db.execute(mov_query, {"day": day_str}).fetchall()
+                movs = db.execute(mov_query, [day_str]).fetchall()
                 
                 # Ventas del día
                 ventas_query = text("""
                     SELECT id, total, payment_method, created_at, payment_breakdown_json 
                     FROM ventas 
-                    WHERE DATE(created_at) = :day
+                    WHERE DATE(created_at) = ?
                     ORDER BY created_at ASC
                 """)
-                ventas = db.execute(ventas_query, {"day": day_str}).fetchall()
+                ventas = db.execute(ventas_query, [day_str]).fetchall()
                 
                 shifts = []
                 current_shift = {
@@ -440,7 +454,7 @@ class ModulesExtractor:
                     "saldo_inicial": 0.0,
                     "ingresos": 0.0,
                     "salidas": 0.0,
-                    "start_time": f"{day_str} 00:00:00",
+                    "start_time": f"{day_str}T00:00:00",
                     "end_time": None,
                     "efectivo": 0.0,
                     "transferencia": 0.0,
@@ -457,25 +471,25 @@ class ModulesExtractor:
                 # Como combinamos con ventas, lo mejor es procesar todo ordenado por fecha
                 all_events = []
                 for m in movs:
-                    all_events.append({"type": "mov", "time": str(m[3]), "data": m})
+                    all_events.append({"type": "mov", "time": normalize_datetime(m[3]), "data": m})
                 for v in ventas:
-                    all_events.append({"type": "venta", "time": str(v[3]), "data": v})
+                    all_events.append({"type": "venta", "time": normalize_datetime(v[3]), "data": v})
                     
-                all_events.sort(key=lambda x: x["time"])
+                all_events.sort(key=lambda x: (x["time"] is None, x["time"]))
                 
                 for ev in all_events:
                     if ev["type"] == "mov":
                         m = ev["data"]
                         m_type = m[1]
                         amount = float(m[2] or 0)
-                        current_shift["movimientos"].append({"type": m_type, "amount": amount, "time": str(m[3]), "notes": m[4]})
+                        current_shift["movimientos"].append({"type": m_type, "amount": amount, "time": normalize_datetime(m[3]), "notes": m[4]})
                         
                         if m_type == 'saldo_inicial':
                             current_shift["saldo_inicial"] += amount
                         elif m_type in ('retiro', 'vale', 'perdida'):
                             current_shift["salidas"] += amount
                         elif m_type == 'reset_turno':
-                            current_shift["end_time"] = str(m[3])
+                            current_shift["end_time"] = normalize_datetime(m[3])
                             shifts.append(current_shift)
                             shift_counter += 1
                             current_shift = {
@@ -483,7 +497,7 @@ class ModulesExtractor:
                                 "saldo_inicial": 0.0,
                                 "ingresos": 0.0,
                                 "salidas": 0.0,
-                                "start_time": str(m[3]),
+                                "start_time": normalize_datetime(m[3]),
                                 "end_time": None,
                                 "efectivo": 0.0,
                                 "transferencia": 0.0,
@@ -492,7 +506,7 @@ class ModulesExtractor:
                                 "mixto": 0.0,
                                 "movimientos": []
                             }
-                            last_time = str(m[3])
+                            last_time = normalize_datetime(m[3])
                     else:
                         v = ev["data"]
                         v_total = float(v[1] or 0)
@@ -523,7 +537,7 @@ class ModulesExtractor:
                             current_shift["efectivo"] += v_total
                 
                 # Añadir el último turno del día (puede estar abierto)
-                current_shift["end_time"] = f"{day_str} 23:59:59"
+                current_shift["end_time"] = f"{day_str}T23:59:59"
                 shifts.append(current_shift)
                 
                 # Totales del día
