@@ -238,7 +238,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         product_id: item.product_id,
         product_name: item.product_name,
         quantity: item.quantity,
-        price: item.price,
+        price: item.price - calculateAddonsPrice(item.toppings || [], item.extras || [], item.guarniciones || []),
         toppings: item.toppings,
         extras: item.extras,
         guarniciones: item.guarniciones
