@@ -402,12 +402,23 @@ class ModulesExtractor:
         # Extraemos los días únicos de movimientos y ventas
         def normalize_datetime(dt_str):
             if not dt_str: return None
+            s = str(dt_str)
             try:
-                from dateutil import parser
-                d = parser.parse(str(dt_str))
+                from email.utils import parsedate_to_datetime
+                d = parsedate_to_datetime(s)
                 return d.strftime("%Y-%m-%dT%H:%M:%S")
             except Exception:
-                return str(dt_str)
+                pass
+            
+            try:
+                from datetime import datetime
+                s_iso = s.replace(' ', 'T')
+                if len(s_iso) == 10:
+                    s_iso += "T00:00:00"
+                d = datetime.fromisoformat(s_iso)
+                return d.strftime("%Y-%m-%dT%H:%M:%S")
+            except Exception:
+                return s
 
         try:
             days_query = text("""
@@ -425,10 +436,17 @@ class ModulesExtractor:
             for day_row in days_res:
                 raw_day = str(day_row[0])
                 try:
-                    from dateutil import parser
-                    day_str = parser.parse(raw_day).strftime("%Y-%m-%d")
+                    from email.utils import parsedate_to_datetime
+                    day_str = parsedate_to_datetime(raw_day).strftime("%Y-%m-%d")
                 except:
-                    day_str = raw_day
+                    try:
+                        from datetime import datetime
+                        s_iso = raw_day.replace(' ', 'T')
+                        if len(s_iso) == 10:
+                            s_iso += "T00:00:00"
+                        day_str = datetime.fromisoformat(s_iso).strftime("%Y-%m-%d")
+                    except:
+                        day_str = raw_day
                 
                 # Movimientos del día ordenados cronológicamente
                 mov_query = text("""
