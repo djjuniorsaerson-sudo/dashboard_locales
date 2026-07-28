@@ -239,9 +239,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         product_name: item.product_name,
         quantity: item.quantity,
         price: item.price - calculateAddonsPrice(item.toppings || [], item.extras || [], item.guarniciones || []),
-        toppings: item.toppings,
-        extras: item.extras,
-        guarniciones: item.guarniciones
+        toppings: (item.toppings || []).map(t => ({...t, quantity: t.qty || 1})),
+        extras: (item.extras || []).map(e => ({...e, quantity: e.qty || 1})),
+        guarniciones: (item.guarniciones || []).map(g => ({...g, quantity: g.qty || 1}))
       }))
     };
 
