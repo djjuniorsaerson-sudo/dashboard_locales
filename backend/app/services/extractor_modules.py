@@ -1060,7 +1060,7 @@ class ModulesExtractor:
     def get_active_pedidos(db: Session):
         try:
             query = text("""
-                SELECT id, status, customer_name, order_type, created_at, notes, total, payment_method, archived
+                SELECT id, status, customer_name, order_type, created_at, notes, total, '' as payment_method, archived
                 FROM pedidos
                 ORDER BY created_at ASC
             """)
@@ -1079,7 +1079,7 @@ class ModulesExtractor:
                 items_query = text("""
                     SELECT product_name, quantity, price
                     FROM detalle_pedidos
-                    WHERE pedido_id = :pid
+                    WHERE order_id = :pid
                 """)
                 items_res = db.execute(items_query, {"pid": pid}).fetchall()
                 
@@ -1116,6 +1116,27 @@ class ModulesExtractor:
                 })
             return pedidos
         except Exception as e:
-            print("Error getting active pedidos:", e)
-            return []
-
+            print("Error in get_active_pedidos:", str(e))
+            return [{
+                "id": 99999,
+                "state": "Pendiente",
+                "status": "Pendiente",
+                "total": 0,
+                "payment_method": "",
+                "customer_name": f"ERROR: {str(e)}",
+                "order_type": "delivery",
+                "created_at": "2026-01-01T00:00:00",
+                "order_time": "2026-01-01T00:00:00",
+                "notes": str(e),
+                "items": [],
+                "kitchen_tickets": {
+                    "kitchen1": {
+                        "status": "Pendiente",
+                        "items": [{"name": f"ERROR: {str(e)}", "product_name": f"ERROR: {str(e)}", "quantity": 1, "price": 0, "routing_type": "Prioritario"}]
+                    },
+                    "kitchen2": {
+                        "status": "No Aplica",
+                        "items": []
+                    }
+                }
+            }]
