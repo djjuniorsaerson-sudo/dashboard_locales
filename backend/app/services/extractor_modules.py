@@ -314,7 +314,7 @@ class ModulesExtractor:
             return empleados
         except Exception as e:
             print("Error in get_employees:", str(e))
-            return []
+            return [{"id": 999, "name": f"ERROR: {str(e)}", "role": "Error", "adelantos": 0, "final_salary": 0}]
 
     @staticmethod
     def get_empleado_novedades(db: Session):
@@ -339,9 +339,10 @@ class ModulesExtractor:
                     "event_date": str(r[6]) if r[6] else None
                 } for r in result
             ]
+            return res
         except Exception as e:
             print("Error in get_empleado_novedades:", str(e))
-            return []
+            return [{"id": 999, "employee_name": f"ERROR: {str(e)}", "event_type": "error", "amount": 0, "notes": str(e), "event_date": "2026-01-01"}]
 
     @staticmethod
     def add_empleado_novedad(db: Session, employee_id: int, data: dict):
