@@ -292,8 +292,8 @@ class ModulesExtractor:
             query = text("SELECT id, name, role, salary_base FROM empleados ORDER BY id ASC")
             result = db.execute(query).fetchall()
             
-            novedades_query = text("SELECT employee_id, SUM(amount) FROM empleado_novedades WHERE LOWER(event_type) LIKE '%adelanto%' OR LOWER(event_type) LIKE '%descuento%' OR LOWER(event_type) LIKE '%falta%' GROUP BY employee_id")
-            novedades_res = db.execute(novedades_query).fetchall()
+            novedades_query = text("SELECT employee_id, SUM(amount) FROM empleado_novedades WHERE LOWER(event_type) LIKE :adelanto OR LOWER(event_type) LIKE :descuento OR LOWER(event_type) LIKE :falta GROUP BY employee_id")
+            novedades_res = db.execute(novedades_query, {"adelanto": "%adelanto%", "descuento": "%descuento%", "falta": "%falta%"}).fetchall()
             adelantos_map = {n[0]: float(n[1] or 0) for n in novedades_res}
 
             empleados = []
@@ -323,11 +323,11 @@ class ModulesExtractor:
                 SELECT n.id, n.employee_id, e.name as employee_name, n.event_type, n.amount, n.notes, n.event_date
                 FROM empleado_novedades n
                 JOIN empleados e ON n.employee_id = e.id
-                WHERE LOWER(n.event_type) LIKE '%adelanto%' OR LOWER(n.event_type) LIKE '%descuento%' OR LOWER(n.event_type) LIKE '%falta%'
+                WHERE LOWER(n.event_type) LIKE :adelanto OR LOWER(n.event_type) LIKE :descuento OR LOWER(n.event_type) LIKE :falta
                 ORDER BY n.event_date DESC, n.id DESC
                 LIMIT 100
             """)
-            result = db.execute(query).fetchall()
+            result = db.execute(query, {"adelanto": "%adelanto%", "descuento": "%descuento%", "falta": "%falta%"}).fetchall()
             return [
                 {
                     "id": r[0],
