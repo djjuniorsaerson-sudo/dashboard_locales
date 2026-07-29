@@ -25,7 +25,16 @@ class YummyIntegrationClient:
         url = f"{self.base_url}/api/integration/sql"
         payload = {"sql": sql, "params": params or {}}
         response = requests.post(url, headers=self.headers, json=payload, timeout=10)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            try:
+                error_msg = response.json().get("error", str(e))
+                raise Exception(f"Database Error: {error_msg}")
+            except Exception as inner_e:
+                if str(inner_e).startswith("Database Error:"):
+                    raise inner_e
+                raise e
         return response.json()
 
     def get_status(self):
