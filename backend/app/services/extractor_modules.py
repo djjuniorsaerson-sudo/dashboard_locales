@@ -1069,7 +1069,7 @@ class ModulesExtractor:
             pedidos = []
             for r in res:
                 # Add safety checks
-                if r[1] not in ('Pendiente', 'Preparando', 'Listo'):
+                if str(r[1]).strip().lower() in ('entregado', 'cancelado', 'cancelado_ok', 'finalizado'):
                     continue
                     
                 pid = r[0]
