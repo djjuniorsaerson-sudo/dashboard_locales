@@ -65,6 +65,39 @@ def register_installation(
         "last_sync_at": install.last_sync_at
     }
 
+@router.post("/auto-register", response_model=Any)
+def auto_register_installation(
+    install_in: YummyInstallCreate,
+    db: Session = Depends(deps.get_db),
+) -> Any:
+    from app.models.organization import Organization
+    org = db.query(Organization).first()
+    if not org:
+        raise HTTPException(status_code=400, detail="No organization exists to register to")
+        
+    install = YummyInstallation(
+        organization_id=org.id,
+        local_id=install_in.local_id,
+        name=install_in.local_name,
+        base_url=install_in.base_url,
+        api_key=install_in.api_key,
+        sync_mode=install_in.sync_mode,
+        connection_status="PENDING"
+    )
+    db.add(install)
+    db.commit()
+    db.refresh(install)
+    return {
+        "id": install.id, 
+        "local_id": install.local_id,
+        "local_name": install.name, 
+        "base_url": install.base_url,
+        "sync_mode": install.sync_mode,
+        "connection_status": install.connection_status,
+        "last_health_check": install.last_health_check,
+        "last_sync_at": install.last_sync_at
+    }
+
 @router.get("/", response_model=List[Any])
 def list_installations(
     db: Session = Depends(deps.get_db),
