@@ -2,9 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 import app.db.base  # Ensure all models are registered
+from app.db.session import engine
 from app.api.v1 import auth, products, yummy, schema
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
+
+# Automatically create all tables (e.g. pairing_codes) if they don't exist
+app.db.base.Base.metadata.create_all(bind=engine)
 
 # Set all CORS enabled origins
 app.add_middleware(
