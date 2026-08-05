@@ -4,11 +4,11 @@ import { useAuth } from '../context/AuthContext';
 export default function YummyInstallations() {
   const { token, fetchLocations } = useAuth();
   const [installations, setInstallations] = useState([]);
+  const [connectionRequests, setConnectionRequests] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [pairingCode, setPairingCode] = useState(null);
   
   const [manualForm, setManualForm] = useState({
     local_id: '', local_name: '', base_url: '', api_key: '', sync_mode: 'manual'
@@ -28,28 +28,61 @@ export default function YummyInstallations() {
     }
   };
 
+  const fetchConnectionRequests = async () => {
+    try {
+      const res = await fetch("/api/v1/yummy-installations/connection-requests/", {
+        headers: { 'Authorization': "Bearer " + token }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setConnectionRequests(data);
+      }
+    } catch (e) {
+      console.error("Error fetching connection requests:", e);
+    }
+  };
+
   useEffect(() => {
     fetchInstallations();
+    fetchConnectionRequests();
+    
+    const intervalId = setInterval(() => {
+      fetchConnectionRequests();
+    }, 10000);
+    
+    return () => clearInterval(intervalId);
   }, [token]);
 
-  const generatePairingCode = async () => {
-    setLoading(true);
-    setErrorMsg('');
+  const handleAcceptRequest = async (id) => {
     try {
-      const res = await fetch("/api/v1/yummy-installations/pairing-code", {
+      const res = await fetch(`/api/v1/yummy-installations/connection-requests/${id}/accept`, {
         method: 'POST',
         headers: { 'Authorization': "Bearer " + token }
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Error HTTP " + res.status);
+      if (res.ok) {
+        fetchConnectionRequests();
+        fetchInstallations();
+        fetchLocations(token);
+      } else {
+        const err = await res.json();
+        alert("Error al aceptar: " + (err.detail || "Error desconocido"));
       }
-      const data = await res.json();
-      setPairingCode(data.code);
     } catch (e) {
-      setErrorMsg(e.message);
-    } finally {
-      setLoading(false);
+      alert("Error de red");
+    }
+  };
+
+  const handleRejectRequest = async (id) => {
+    try {
+      const res = await fetch(`/api/v1/yummy-installations/connection-requests/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Authorization': "Bearer " + token }
+      });
+      if (res.ok) {
+        fetchConnectionRequests();
+      }
+    } catch (e) {
+      alert("Error de red");
     }
   };
 
@@ -164,30 +197,46 @@ export default function YummyInstallations() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Terminales Yummy POS</h1>
-        <div className="space-x-4">
-          <button 
-            onClick={generatePairingCode}
-            className="bg-purple-600 text-white px-4 py-2 rounded shadow hover:bg-purple-700"
-          >
-            Generar Código de Vinculación
-          </button>
-          <button 
-            onClick={() => setShowModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700"
-          >
-            Añadir Manualmente
-          </button>
-        </div>
+        <button 
+          onClick={() => setShowModal(true)}
+          className="bg-gray-600 text-white px-4 py-2 rounded shadow hover:bg-gray-700"
+        >
+          Añadir Manualmente (Emergencia)
+        </button>
       </div>
 
-      {pairingCode && (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6 shadow">
-          <p className="font-bold">Código de Vinculación Generado:</p>
-          <p className="text-3xl font-mono tracking-widest mt-2">{pairingCode}</p>
-          <p className="text-sm mt-2">Válido por 15 minutos. Ingrésalo en la PC del local comercial.</p>
+      {connectionRequests.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-bold mb-4 text-purple-700">Solicitudes Pendientes</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {connectionRequests.map(req => (
+              <div key={req.id} className="bg-purple-50 rounded-lg shadow p-5 border border-purple-200">
+                <h3 className="font-bold text-lg mb-2 text-purple-900">{req.local_name}</h3>
+                <p className="text-sm text-purple-700 mb-1">URL: {req.base_url}</p>
+                <p className="text-sm text-purple-700 mb-3">
+                  Hace: {Math.round((new Date() - new Date(req.requested_at)) / 60000)} min
+                </p>
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={() => handleAcceptRequest(req.id)}
+                    className="flex-1 bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm font-semibold"
+                  >
+                    Aceptar
+                  </button>
+                  <button 
+                    onClick={() => handleRejectRequest(req.id)}
+                    className="flex-1 bg-red-600 text-white px-3 py-2 rounded hover:bg-red-700 text-sm font-semibold"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
+      <h2 className="text-xl font-bold mb-4">Terminales Vinculadas</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {installations.map(inst => (
           <div key={inst.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">

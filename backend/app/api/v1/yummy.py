@@ -10,10 +10,11 @@ import time
 
 from app.api import deps
 from app.models.yummy import YummyInstallation, YummySnapshot
-from app.models.pairing_code import PairingCode
+from app.models.connection_request import ConnectionRequest, ConnectionStatus
 from app.models.user import User
 from app.services.yummy_client import YummyIntegrationClient
 from pydantic import BaseModel
+import bcrypt
 
 router = APIRouter()
 
@@ -24,13 +25,12 @@ class YummyManualCreate(BaseModel):
     api_key: str
     sync_mode: str = "manual"
 
-class YummyAutoRegister(BaseModel):
+class ConnectionRequestCreate(BaseModel):
     local_id: str
     local_name: str
     base_url: str
     api_key: str
-    sync_mode: str = "manual"
-    pairing_code: str
+    version: str = "1.0.0"
 
 class CommandPayload(BaseModel):
     command: str
@@ -45,8 +45,107 @@ def get_install_secure(db: Session, id: UUID, org_id: UUID) -> YummyInstallation
         raise HTTPException(status_code=404, detail="Installation not found or access denied")
     return install
 
-@router.post("/pairing-code", response_model=Any)
-def generate_pairing_code(
+@router.post("/connection-requests/", response_model=Any)
+def create_connection_request(
+    req_in: ConnectionRequestCreate,
+    db: Session = Depends(deps.get_db),
+) -> Any:
+    # 1. Check if local_id is already linked to an organization
+    existing_install = db.query(YummyInstallation).filter(YummyInstallation.local_id == req_in.local_id).first()
+    if existing_install:
+        raise HTTPException(status_code=409, detail="Esta terminal ya está vinculada a una organización.")
+        
+    # 2. Check if there is an existing PENDING request and invalidate it
+    existing_requests = db.query(ConnectionRequest).filter(
+        ConnectionRequest.local_id == req_in.local_id,
+        ConnectionRequest.status == ConnectionStatus.PENDING
+    ).all()
+    for req in existing_requests:
+        req.status = ConnectionStatus.EXPIRED
+        
+    # 3. Create poll_token
+    poll_token = secrets.token_urlsafe(32)
+    poll_token_hash = bcrypt.hashpw(poll_token.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    # 4. Save new request
+    new_req = ConnectionRequest(
+        local_id=req_in.local_id,
+        local_name=req_in.local_name,
+        base_url=req_in.base_url,
+        api_key=req_in.api_key,
+        version=req_in.version,
+        status=ConnectionStatus.PENDING,
+        poll_token_hash=poll_token_hash
+    )
+    db.add(new_req)
+    db.commit()
+    db.refresh(new_req)
+    
+    return {
+        "request_id": str(new_req.id),
+        "poll_token": poll_token,
+        "status": new_req.status.value
+    }
+
+@router.get("/connection-requests/{request_id}/status", response_model=Any)
+def check_connection_request_status(
+    request_id: UUID,
+    db: Session = Depends(deps.get_db),
+    poll_token: str = Depends(deps.get_api_key_header) # Reusing API key header logic or we can use custom
+) -> Any:
+    from fastapi import Header
+    pass # Replaced by the next chunk logic since depends is tricky here.
+
+@router.get("/connection-requests/{request_id}/status", response_model=Any)
+def check_connection_request_status(
+    request_id: UUID,
+    x_poll_token: str = Depends(deps.APIKeyHeader(name="X-Poll-Token", auto_error=True)),
+    db: Session = Depends(deps.get_db)
+) -> Any:
+    from fastapi.security.api_key import APIKeyHeader
+    req = db.query(ConnectionRequest).filter(ConnectionRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    if not bcrypt.checkpw(x_poll_token.encode('utf-8'), req.poll_token_hash.encode('utf-8')):
+        raise HTTPException(status_code=403, detail="Invalid poll token")
+        
+    # Handle expiration logic on read
+    if req.status == ConnectionStatus.PENDING and (datetime.now(timezone.utc) - req.requested_at).total_seconds() > 900:
+        req.status = ConnectionStatus.EXPIRED
+        db.commit()
+        
+    return {
+        "status": req.status.value,
+        "resolved_at": req.resolved_at,
+        "accepted_organization_id": req.accepted_organization_id
+    }
+
+@router.get("/connection-requests/", response_model=Any)
+def list_pending_requests(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    # Only pending, non-expired requests
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=15)
+    requests = db.query(ConnectionRequest).filter(
+        ConnectionRequest.status == ConnectionStatus.PENDING,
+        ConnectionRequest.requested_at > threshold
+    ).all()
+    
+    return [{
+        "id": r.id,
+        "local_name": r.local_name,
+        "local_id": r.local_id,
+        "base_url": r.base_url,
+        "version": r.version,
+        "requested_at": r.requested_at,
+        "status": r.status.value
+    } for r in requests]
+
+@router.post("/connection-requests/{request_id}/accept", response_model=Any)
+def accept_connection_request(
+    request_id: UUID,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
@@ -54,28 +153,52 @@ def generate_pairing_code(
     if not org_id:
         raise HTTPException(status_code=400, detail="User does not belong to an organization")
         
-    db.query(PairingCode).filter(
-        PairingCode.organization_id == org_id,
-        PairingCode.is_used == False,
-        PairingCode.expires_at > datetime.now(timezone.utc)
-    ).update({"is_used": True})
+    req = db.query(ConnectionRequest).filter(ConnectionRequest.id == request_id).first()
+    if not req or req.status != ConnectionStatus.PENDING:
+        raise HTTPException(status_code=404, detail="Pending request not found")
+        
+    # Double check local_id isn't taken
+    if db.query(YummyInstallation).filter(YummyInstallation.local_id == req.local_id).first():
+        raise HTTPException(status_code=409, detail="This local_id is already connected to another organization")
+        
+    req.status = ConnectionStatus.ACCEPTED
+    req.resolved_at = datetime.now(timezone.utc)
+    req.accepted_organization_id = org_id
     
-    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    while True:
-        code = ''.join(secrets.choice(alphabet) for _ in range(6))
-        if not db.query(PairingCode).filter(PairingCode.code == code).first():
-            break
-            
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
-    new_code = PairingCode(
-        code=code,
+    install = YummyInstallation(
         organization_id=org_id,
-        expires_at=expires_at,
-        is_used=False
+        local_id=req.local_id,
+        name=req.local_name,
+        base_url=req.base_url,
+        api_key=req.api_key,
+        sync_mode="manual",
+        connection_status="ONLINE"
     )
-    db.add(new_code)
+    db.add(install)
+    
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Transaction failed")
+        
+    return {"status": "accepted"}
+
+@router.post("/connection-requests/{request_id}/reject", response_model=Any)
+def reject_connection_request(
+    request_id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    req = db.query(ConnectionRequest).filter(ConnectionRequest.id == request_id).first()
+    if not req or req.status != ConnectionStatus.PENDING:
+        raise HTTPException(status_code=404, detail="Pending request not found")
+        
+    req.status = ConnectionStatus.REJECTED
+    req.resolved_at = datetime.now(timezone.utc)
     db.commit()
-    return {"code": code, "expires_at": expires_at}
+    
+    return {"status": "rejected"}
 
 @router.post("/", response_model=Any)
 def register_installation(
@@ -99,62 +222,6 @@ def register_installation(
     db.add(install)
     db.commit()
     db.refresh(install)
-    return {
-        "id": install.id, 
-        "local_id": install.local_id,
-        "local_name": install.name, 
-        "base_url": install.base_url,
-        "sync_mode": install.sync_mode,
-        "connection_status": install.connection_status,
-        "last_health_check": install.last_health_check,
-        "last_sync_at": install.last_sync_at
-    }
-
-@router.post("/auto-register", response_model=Any)
-def auto_register_installation(
-    install_in: YummyAutoRegister,
-    db: Session = Depends(deps.get_db),
-) -> Any:
-    code_str = install_in.pairing_code.strip().upper()
-    pairing = db.query(PairingCode).filter(
-        PairingCode.code == code_str, 
-        PairingCode.is_used == False
-    ).first()
-    
-    if not pairing or pairing.expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Código de vinculación inválido o expirado")
-        
-    org_id = pairing.organization_id
-    
-    existing_install = db.query(YummyInstallation).filter(YummyInstallation.local_id == install_in.local_id).first()
-    if existing_install:
-        if existing_install.organization_id != org_id:
-            raise HTTPException(status_code=409, detail="Esta terminal ya está vinculada a otra organización.")
-        existing_install.name = install_in.local_name
-        existing_install.base_url = install_in.base_url
-        existing_install.api_key = install_in.api_key
-        existing_install.sync_mode = install_in.sync_mode
-        install = existing_install
-    else:
-        install = YummyInstallation(
-            organization_id=org_id,
-            local_id=install_in.local_id,
-            name=install_in.local_name,
-            base_url=install_in.base_url,
-            api_key=install_in.api_key,
-            sync_mode=install_in.sync_mode,
-            connection_status="PENDING"
-        )
-        db.add(install)
-        
-    pairing.is_used = True
-    try:
-        db.commit()
-        db.refresh(install)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Error de base de datos al guardar la instalación")
-        
     return {
         "id": install.id, 
         "local_id": install.local_id,
