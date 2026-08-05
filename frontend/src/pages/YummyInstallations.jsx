@@ -16,7 +16,7 @@ export default function YummyInstallations() {
 
   const fetchInstallations = async () => {
     try {
-      const res = await fetch(/api/v1/yummy-installations/, {
+      const res = await fetch("/api/v1/yummy-installations/", {
         headers: { 'Authorization': "Bearer " + token }
       });
       if (res.ok) {
@@ -36,13 +36,13 @@ export default function YummyInstallations() {
     setLoading(true);
     setErrorMsg('');
     try {
-      const res = await fetch(/api/v1/yummy-installations/pairing-code, {
+      const res = await fetch("/api/v1/yummy-installations/pairing-code", {
         method: 'POST',
         headers: { 'Authorization': "Bearer " + token }
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(text || Error HTTP " + res.status);
+        throw new Error(text || "Error HTTP " + res.status);
       }
       const data = await res.json();
       setPairingCode(data.code);
@@ -77,7 +77,7 @@ export default function YummyInstallations() {
     setErrorMsg('');
 
     try {
-      const registerRes = await fetch(/api/v1/yummy-installations/, {
+      const registerRes = await fetch("/api/v1/yummy-installations/", {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -89,7 +89,7 @@ export default function YummyInstallations() {
       if (!registerRes.ok) {
         const text = await registerRes.text();
         console.error(registerRes.status, text);
-        throw new Error(text || Error HTTP " + registerRes.status);
+        throw new Error(text || "Error HTTP " + registerRes.status);
       }
       const newInst = await registerRes.json();
       
@@ -112,7 +112,7 @@ export default function YummyInstallations() {
 
   const handleTestConnection = async (id) => {
     try {
-      const res = await fetch(/api/v1/yummy-installations/ + id + /test-connection, {
+      const res = await fetch("/api/v1/yummy-installations/" + id + "/test-connection", {
         method: 'POST',
         headers: { 'Authorization': "Bearer " + token }
       });
@@ -131,7 +131,7 @@ export default function YummyInstallations() {
 
   const runDiagnostics = async (id) => {
     try {
-      const res = await fetch(/api/v1/yummy-installations/ + id + /diagnostics, {
+      const res = await fetch("/api/v1/yummy-installations/" + id + "/diagnostics", {
         method: 'GET',
         headers: { 'Authorization': "Bearer " + token }
       });
@@ -145,7 +145,7 @@ export default function YummyInstallations() {
   const handleDeleteInstallation = async (id) => {
     if(!confirm("¿Estás seguro de eliminar esta instalación?")) return;
     try {
-      const res = await fetch(/api/v1/yummy-installations/ + id, {
+      const res = await fetch("/api/v1/yummy-installations/" + id, {
         method: 'DELETE',
         headers: { 'Authorization': "Bearer " + token }
       });
