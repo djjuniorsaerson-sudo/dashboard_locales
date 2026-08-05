@@ -2,22 +2,35 @@ from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+import secrets
+import string
+import requests
+import time
 
 from app.api import deps
 from app.models.yummy import YummyInstallation, YummySnapshot
+from app.models.pairing_code import PairingCode
 from app.models.user import User
 from app.services.yummy_client import YummyIntegrationClient
 from pydantic import BaseModel
 
 router = APIRouter()
 
-class YummyInstallCreate(BaseModel):
+class YummyManualCreate(BaseModel):
     local_id: str
     local_name: str
     base_url: str
     api_key: str
     sync_mode: str = "manual"
+
+class YummyAutoRegister(BaseModel):
+    local_id: str
+    local_name: str
+    base_url: str
+    api_key: str
+    sync_mode: str = "manual"
+    pairing_code: str
 
 class CommandPayload(BaseModel):
     command: str
@@ -32,9 +45,41 @@ def get_install_secure(db: Session, id: UUID, org_id: UUID) -> YummyInstallation
         raise HTTPException(status_code=404, detail="Installation not found or access denied")
     return install
 
+@router.post("/pairing-code", response_model=Any)
+def generate_pairing_code(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    org_id = current_user.organization_id
+    if not org_id:
+        raise HTTPException(status_code=400, detail="User does not belong to an organization")
+        
+    db.query(PairingCode).filter(
+        PairingCode.organization_id == org_id,
+        PairingCode.is_used == False,
+        PairingCode.expires_at > datetime.now(timezone.utc)
+    ).update({"is_used": True})
+    
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    while True:
+        code = ''.join(secrets.choice(alphabet) for _ in range(6))
+        if not db.query(PairingCode).filter(PairingCode.code == code).first():
+            break
+            
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    new_code = PairingCode(
+        code=code,
+        organization_id=org_id,
+        expires_at=expires_at,
+        is_used=False
+    )
+    db.add(new_code)
+    db.commit()
+    return {"code": code, "expires_at": expires_at}
+
 @router.post("/", response_model=Any)
 def register_installation(
-    install_in: YummyInstallCreate,
+    install_in: YummyManualCreate,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
@@ -67,26 +112,49 @@ def register_installation(
 
 @router.post("/auto-register", response_model=Any)
 def auto_register_installation(
-    install_in: YummyInstallCreate,
+    install_in: YummyAutoRegister,
     db: Session = Depends(deps.get_db),
 ) -> Any:
-    from app.models.organization import Organization
-    org = db.query(Organization).first()
-    if not org:
-        raise HTTPException(status_code=400, detail="No organization exists to register to")
+    code_str = install_in.pairing_code.strip().upper()
+    pairing = db.query(PairingCode).filter(
+        PairingCode.code == code_str, 
+        PairingCode.is_used == False
+    ).first()
+    
+    if not pairing or pairing.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Código de vinculación inválido o expirado")
         
-    install = YummyInstallation(
-        organization_id=org.id,
-        local_id=install_in.local_id,
-        name=install_in.local_name,
-        base_url=install_in.base_url,
-        api_key=install_in.api_key,
-        sync_mode=install_in.sync_mode,
-        connection_status="PENDING"
-    )
-    db.add(install)
-    db.commit()
-    db.refresh(install)
+    org_id = pairing.organization_id
+    
+    existing_install = db.query(YummyInstallation).filter(YummyInstallation.local_id == install_in.local_id).first()
+    if existing_install:
+        if existing_install.organization_id != org_id:
+            raise HTTPException(status_code=409, detail="Esta terminal ya está vinculada a otra organización.")
+        existing_install.name = install_in.local_name
+        existing_install.base_url = install_in.base_url
+        existing_install.api_key = install_in.api_key
+        existing_install.sync_mode = install_in.sync_mode
+        install = existing_install
+    else:
+        install = YummyInstallation(
+            organization_id=org_id,
+            local_id=install_in.local_id,
+            name=install_in.local_name,
+            base_url=install_in.base_url,
+            api_key=install_in.api_key,
+            sync_mode=install_in.sync_mode,
+            connection_status="PENDING"
+        )
+        db.add(install)
+        
+    pairing.is_used = True
+    try:
+        db.commit()
+        db.refresh(install)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error de base de datos al guardar la instalación")
+        
     return {
         "id": install.id, 
         "local_id": install.local_id,
@@ -126,7 +194,6 @@ def delete_installation(
 ) -> Any:
     try:
         install = get_install_secure(db, id, current_user.organization_id)
-        # Delete related snapshots first to avoid foreign key constraints
         db.query(YummySnapshot).filter(YummySnapshot.installation_id == id).delete()
         
         db.delete(install)
@@ -146,7 +213,7 @@ def test_connection(
     client = YummyIntegrationClient(install.base_url, install.api_key)
     try:
         health_data = client.check_health()
-        status_data = client.get_status() # As requested by user
+        status_data = client.get_status()
         
         install.connection_status = "ONLINE"
         install.last_health_check = datetime.utcnow()
@@ -156,6 +223,30 @@ def test_connection(
         install.connection_status = "ERROR"
         db.commit()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{id}/diagnostics")
+def run_diagnostics(
+    id: UUID,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    install = get_install_secure(db, id, current_user.organization_id)
+    url = f"{install.base_url.rstrip('/')}/health"
+    start = time.time()
+    try:
+        resp = requests.get(url, timeout=7)
+        elapsed_ms = int((time.time() - start) * 1000)
+        return {
+            "reachable": True,
+            "url": url,
+            "status_code": resp.status_code,
+            "response_time_ms": elapsed_ms,
+            "response_json": resp.json() if "application/json" in resp.headers.get("Content-Type", "") else resp.text
+        }
+    except requests.exceptions.Timeout:
+        return {"reachable": False, "error_type": "timeout", "message": "El conector no respondió dentro del tiempo permitido (7s)", "url": url}
+    except requests.exceptions.RequestException as e:
+        return {"reachable": False, "error_type": "connection_error", "message": str(e), "url": url}
 
 @router.post("/{id}/sync-snapshot")
 def sync_snapshot(
@@ -168,7 +259,6 @@ def sync_snapshot(
     try:
         snapshot_data = client.get_export()
         
-        # Persist the snapshot in DB
         snapshot = YummySnapshot(
             installation_id=install.id,
             snapshot_data=snapshot_data,
@@ -181,7 +271,6 @@ def sync_snapshot(
         db.commit()
         return {"status": "success", "snapshot_id": snapshot.id}
     except Exception as e:
-        # Record failed snapshot attempt
         snapshot = YummySnapshot(
             installation_id=install.id,
             snapshot_data={},
