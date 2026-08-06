@@ -19,6 +19,8 @@ services:
     image: central-api:v5
     container_name: central-api
     restart: unless-stopped
+    ports:
+      - "8001:8000"
     environment:
       - DATABASE_URL=postgresql://central_admin:central_password_123@central-db:5432/central_db
       - YUMMY_DB_URL=postgresql://yummy_app:YummyDb2026!@localhost:5432/yummy
