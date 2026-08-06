@@ -1,6 +1,7 @@
 from typing import Any, Optional
 from uuid import UUID
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -50,13 +51,49 @@ def enqueue_create_order(
         payload=payload.model_dump(),
     )
     db.add(action)
-    db.commit()
-    db.refresh(action)
-    return {
-        "id": str(action.id),
-        "status": action.status.value,
-        "installation_id": str(installation.id),
-    }
+    db.flush()
+
+    try:
+        response = requests.post(
+            f"{installation.base_url.rstrip('/')}/api/pedidos",
+            json=payload.model_dump(),
+            headers={
+                "Content-Type": "application/json",
+                "X-Terminal-Profile": "admin",
+            },
+            timeout=15,
+        )
+        response_data = response.json()
+        if response.status_code >= 400:
+            detail = response_data.get("error") or response_data.get("message") or response.text
+            if response.status_code == 409:
+                raise HTTPException(status_code=409, detail=detail)
+            raise HTTPException(status_code=502, detail=detail)
+
+        action.status = RemoteActionStatus.COMPLETED
+        action.result_payload = response_data
+        action.error_message = None
+        db.add(action)
+        db.commit()
+        db.refresh(action)
+        return {
+            "id": str(action.id),
+            "status": action.status.value,
+            "installation_id": str(installation.id),
+            "result": response_data,
+        }
+    except HTTPException as exc:
+        action.status = RemoteActionStatus.FAILED
+        action.error_message = str(exc.detail)
+        db.add(action)
+        db.commit()
+        raise exc
+    except requests.RequestException as exc:
+        action.status = RemoteActionStatus.FAILED
+        action.error_message = str(exc)
+        db.add(action)
+        db.commit()
+        raise HTTPException(status_code=502, detail=f"Connector unreachable: {exc}")
 
 
 @router.get("/installations/{installation_id}")

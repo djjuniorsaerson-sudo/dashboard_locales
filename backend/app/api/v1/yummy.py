@@ -39,7 +39,7 @@ class ConnectionRequestCreate(BaseModel):
     local_id: str
     local_name: str
     base_url: str
-    api_key: str
+    api_key: str = "__MANUAL__"
     version: str = "1.0.0"
     system_type: str = "yummy"
     connector_slug: str = "connector-yummy"
@@ -183,11 +183,18 @@ def check_connection_request_status(
         request.status = ConnectionStatus.EXPIRED
         db.commit()
 
+    installation = None
+    if request.approved_installation_id:
+        installation = db.query(YummyInstallation).filter(
+            YummyInstallation.id == request.approved_installation_id
+        ).first()
+
     return {
         "status": request.status.value,
         "resolved_at": request.resolved_at,
         "installation_id": request.approved_installation_id,
         "connector_token": request.approved_connector_token,
+        "api_key": installation.api_key if installation else None,
         "system_type": request.system_type,
         "connector_slug": request.connector_slug,
     }
@@ -238,6 +245,7 @@ def accept_connection_request(
         raise HTTPException(status_code=409, detail="This local_id is already connected to another organization")
 
     connector_token = secrets.token_urlsafe(32)
+    integration_api_key = request.api_key if request.api_key and request.api_key != "__AUTO_CONNECT_PENDING__" else secrets.token_urlsafe(32)
     installation = YummyInstallation(
         organization_id=org_id,
         local_id=request.local_id,
@@ -246,7 +254,7 @@ def accept_connection_request(
         connector_slug=request.connector_slug,
         device_name=request.device_name or request.local_name,
         base_url=request.base_url,
-        api_key=request.api_key,
+        api_key=integration_api_key,
         connector_token_hash=get_password_hash(connector_token),
         sync_mode="automatic",
         connection_status="PENDING",

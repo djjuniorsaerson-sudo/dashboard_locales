@@ -4,7 +4,7 @@ from app.core.config import settings
 import app.db.base  # Ensure all models are registered
 from app.db.base import Base
 from app.db.session import engine
-from app.api.v1 import auth, yummy, schema, remote_actions
+from app.api.v1 import auth, yummy, schema, remote_actions, sync
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
@@ -24,6 +24,7 @@ app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["aut
 app.include_router(yummy.router, prefix=f"{settings.API_V1_STR}/yummy-installations", tags=["yummy"])
 app.include_router(schema.router, prefix=f"{settings.API_V1_STR}/schema", tags=["schema"])
 app.include_router(remote_actions.router, prefix=f"{settings.API_V1_STR}/remote-actions", tags=["remote-actions"])
+app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
 from app.api.v1 import dashboard
 from app.api.v1 import data
 from app.api.v1 import orders
