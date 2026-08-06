@@ -1,18 +1,21 @@
 from typing import Generator
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.security.api_key import APIKeyHeader
 from jose import jwt, JWTError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal, YummySessionLocal
 from app.core.config import settings
 from app.core.security import ALGORITHM
+from app.core.security import verify_password
 from app.schemas.user import TokenPayload
 from app.models.user import User
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login"
 )
+connector_api_key_header = APIKeyHeader(name="X-Connector-Token", auto_error=True)
 
 def get_db() -> Generator:
     try:
@@ -111,3 +114,18 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+
+def get_connector_installation(
+    installation_id: str,
+    db: Session = Depends(get_db),
+    connector_token: str = Depends(connector_api_key_header),
+):
+    from app.models.yummy import YummyInstallation
+
+    install = db.query(YummyInstallation).filter(YummyInstallation.id == installation_id).first()
+    if not install or not install.connector_token_hash:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Installation not found")
+    if not verify_password(connector_token, install.connector_token_hash):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid connector token")
+    return install

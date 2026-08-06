@@ -13,10 +13,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/data/cocina/pedidos`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Integration-Key': currentLocation?.api_key || '' 
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
@@ -52,14 +49,11 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
     try {
       const res = await fetch(`/api/v1/data/pedidos/${orderId}/cancel`, {
         method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Integration-Key': currentLocation?.api_key || ''
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
         const errText = await res.text();
-        alert(`Error al cancelar: ${res.status} - KeyEnviada: ${currentLocation?.api_key} - ${errText}`);
+        alert(`Error al cancelar: ${res.status} - ${errText}`);
         fetchOrders();
       } else {
         // En un caso real mostraríamos un toast

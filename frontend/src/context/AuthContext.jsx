@@ -19,8 +19,10 @@ export const AuthProvider = ({ children }) => {
         const mapped = data.map(inst => ({
           id: inst.id.toString(),
           name: inst.local_name,
-          base_url: inst.base_url,
-          api_key: inst.api_key
+          systemType: inst.system_type,
+          connectorSlug: inst.connector_slug,
+          status: inst.connection_status,
+          deviceName: inst.device_name
         }));
         setLocations(mapped);
         if (mapped.length > 0 && !currentLocation) {

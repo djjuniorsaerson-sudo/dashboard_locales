@@ -6,7 +6,6 @@ import { Plus, Trash2, ShoppingBag, User, CheckCircle2 } from 'lucide-react';
 export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentView }) {
   const { token, currentLocation } = useAuth();
   const [products, setProducts] = useState([]);
-  const [isReorderMode, setIsReorderMode] = useState(false);
   
   // Client Form
   const [phone, setPhone] = useState('');
@@ -22,51 +21,18 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    fetch(`/api/v1/data/products`, {
+    if (!currentLocation?.id) {
+      setProducts([]);
+      return;
+    }
+
+    fetch(`/api/v1/yummy-installations/${currentLocation.id}/catalog`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
-    .then(res => res.json())
-    .then(data => setProducts(data.filter(p => p.active)))
-    .catch(err => console.error(err));
-  }, [token]);
-
-  const saveOrder = async (newProductsList) => {
-    try {
-      const orderedIds = newProductsList.map(p => p.id);
-      await fetch(`/api/v1/data/products/reorder`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ ordered_ids: orderedIds })
-      });
-    } catch (e) {
-      console.error("Error reordering:", e);
-    }
-  };
-
-  const handleMoveLeft = (e, index) => {
-    e.stopPropagation();
-    if (index === 0) return;
-    const newProducts = [...products];
-    const temp = newProducts[index];
-    newProducts[index] = newProducts[index - 1];
-    newProducts[index - 1] = temp;
-    setProducts(newProducts);
-    saveOrder(newProducts);
-  };
-
-  const handleMoveRight = (e, index) => {
-    e.stopPropagation();
-    if (index === products.length - 1) return;
-    const newProducts = [...products];
-    const temp = newProducts[index];
-    newProducts[index] = newProducts[index + 1];
-    newProducts[index + 1] = temp;
-    setProducts(newProducts);
-    saveOrder(newProducts);
-  };
+      .then(res => res.json())
+      .then(data => setProducts((data.products || []).filter(p => p.active)))
+      .catch(err => console.error(err));
+  }, [token, currentLocation?.id]);
 
   useEffect(() => {
     if (orderToEdit) {
@@ -222,6 +188,10 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       setErrorMsg("Agrega al menos un producto al carrito");
       return;
     }
+    if (!currentLocation?.id && !orderToEdit) {
+      setErrorMsg("Selecciona un local antes de crear el pedido");
+      return;
+    }
     setLoading(true);
     setErrorMsg('');
     setSuccessMsg('');
@@ -251,22 +221,23 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
 
     try {
       const isEdit = !!orderToEdit;
-      const url = isEdit ? `/api/v1/data/pedidos/${orderToEdit.id}` : `/api/v1/orders/create`;
+      const url = isEdit
+        ? `/api/v1/data/pedidos/${orderToEdit.id}`
+        : `/api/v1/remote-actions/installations/${currentLocation.id}/create-order`;
       const method = isEdit ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
         method: method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Integration-Key': currentLocation?.api_key || ''
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
       
       if (res.ok) {
-        setSuccessMsg(isEdit ? "¡Pedido actualizado con éxito!" : "¡Pedido enviado a Yummy con éxito!");
+        setSuccessMsg(isEdit ? "¡Pedido actualizado con éxito!" : "¡Pedido enviado al conector para ejecución!");
         setCart([]);
         setPhone('');
         setName('');
@@ -321,12 +292,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
             <ShoppingBag className="w-5 h-5 text-blue-400 mr-2" />
             <h2 className="text-xl font-bold text-white tracking-wide">Catálogo Rápido</h2>
           </div>
-          <button 
-            onClick={() => setIsReorderMode(!isReorderMode)}
-            className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${isReorderMode ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white hover:bg-gray-700'}`}
-          >
-            {isReorderMode ? 'Cerrar Edición' : 'Reordenar'}
-          </button>
+          <div className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-gray-800 text-gray-400 border-gray-700">
+            Catálogo central
+          </div>
         </div>
         <div className="p-5 overflow-y-auto flex-1 z-10 custom-scrollbar">
           <motion.div 
@@ -335,35 +303,18 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
             animate="show"
             className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
           >
-            {products.map((p, index) => (
+            {products.map((p) => (
               <motion.button 
                 variants={itemVariants}
-                whileHover={!isReorderMode ? { scale: 1.03, y: -2 } : {}}
-                whileTap={!isReorderMode ? { scale: 0.97 } : {}}
+                whileHover={{ scale: 1.03, y: -2 }}
+                whileTap={{ scale: 0.97 }}
                 key={p.id}
-                onClick={() => !isReorderMode && openCustomizer(p)}
-                className={`group relative bg-gray-800/40 backdrop-blur-md border p-5 rounded-2xl flex flex-col items-center justify-center text-center transition-all overflow-hidden ${isReorderMode ? 'border-amber-500/30 ring-1 ring-amber-500/20' : 'border-gray-700/50 hover:bg-gray-800/80 hover:border-blue-500/50'}`}
+                onClick={() => openCustomizer(p)}
+                className="group relative bg-gray-800/40 backdrop-blur-md border p-5 rounded-2xl flex flex-col items-center justify-center text-center transition-all overflow-hidden border-gray-700/50 hover:bg-gray-800/80 hover:border-blue-500/50"
               >
-                {!isReorderMode && <div className="absolute inset-0 bg-gradient-to-t from-blue-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:to-transparent transition-all"></div>}
+                <div className="absolute inset-0 bg-gradient-to-t from-blue-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:to-transparent transition-all"></div>
                 
-                {isReorderMode && (
-                  <div className="absolute top-2 right-2 left-2 flex justify-between z-20">
-                    <div 
-                      onClick={(e) => handleMoveLeft(e, index)}
-                      className={`p-1 rounded bg-gray-900 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors ${index === 0 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer shadow-lg'}`}
-                    >
-                      ◀
-                    </div>
-                    <div 
-                      onClick={(e) => handleMoveRight(e, index)}
-                      className={`p-1 rounded bg-gray-900 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors ${index === products.length - 1 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer shadow-lg'}`}
-                    >
-                      ▶
-                    </div>
-                  </div>
-                )}
-                
-                <span className={`font-bold text-white mb-2 relative z-10 drop-shadow-md ${isReorderMode ? 'mt-4' : ''}`}>{p.name}</span>
+                <span className="font-bold text-white mb-2 relative z-10 drop-shadow-md">{p.name}</span>
                 <span className="text-emerald-400 font-bold relative z-10 bg-emerald-500/10 px-3 py-1 rounded-full text-sm">${p.price.toLocaleString()}</span>
               </motion.button>
             ))}

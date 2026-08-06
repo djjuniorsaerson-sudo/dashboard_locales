@@ -12,14 +12,21 @@ class YummyInstallation(Base):
     
     local_id = Column(String, nullable=False, index=True)
     name = Column(String, nullable=False)
+    system_type = Column(String, nullable=False, default="yummy")
+    connector_slug = Column(String, nullable=False, default="connector-yummy")
+    device_name = Column(String, nullable=True)
     base_url = Column(String, nullable=False)
     api_key = Column(String, nullable=False)
+    connector_token_hash = Column(String, nullable=True)
     sync_mode = Column(String, default="manual") # manual | automatic
     integration_enabled = Column(Boolean, default=True)
     
     connection_status = Column(String, default="PENDING") # ONLINE, OFFLINE, ERROR, PENDING
     last_health_check = Column(DateTime, nullable=True)
     last_sync_at = Column(DateTime, nullable=True)
+    last_seen_ip = Column(String, nullable=True)
+    heartbeat_payload = Column(JSONB, nullable=True)
+    paired_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class YummySnapshot(Base):

@@ -2,13 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 import app.db.base  # Ensure all models are registered
+from app.db.base import Base
 from app.db.session import engine
-from app.api.v1 import auth, products, yummy, schema
+from app.api.v1 import auth, yummy, schema, remote_actions
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
 # Automatically create all tables (e.g. pairing_codes) if they don't exist
-app.db.base.Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 # Set all CORS enabled origins
 app.add_middleware(
@@ -20,9 +21,9 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
-app.include_router(products.router, prefix=f"{settings.API_V1_STR}/products", tags=["products"])
 app.include_router(yummy.router, prefix=f"{settings.API_V1_STR}/yummy-installations", tags=["yummy"])
 app.include_router(schema.router, prefix=f"{settings.API_V1_STR}/schema", tags=["schema"])
+app.include_router(remote_actions.router, prefix=f"{settings.API_V1_STR}/remote-actions", tags=["remote-actions"])
 from app.api.v1 import dashboard
 from app.api.v1 import data
 from app.api.v1 import orders

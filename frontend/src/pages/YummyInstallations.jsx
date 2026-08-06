@@ -129,7 +129,6 @@ export default function YummyInstallations() {
       setShowModal(false);
       setManualForm({ local_id: '', local_name: '', base_url: '', api_key: '', sync_mode: 'manual' });
       setJsonInput('');
-      setPairingCode(null);
       
       setInstallations(prev => [...prev, newInst]);
       fetchLocations(token);
@@ -196,7 +195,7 @@ export default function YummyInstallations() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Terminales Yummy POS</h1>
+        <h1 className="text-2xl font-bold">Instalaciones y Conectores</h1>
         <button 
           onClick={() => setShowModal(true)}
           className="bg-gray-600 text-white px-4 py-2 rounded shadow hover:bg-gray-700"
@@ -212,7 +211,9 @@ export default function YummyInstallations() {
             {connectionRequests.map(req => (
               <div key={req.id} className="bg-purple-50 rounded-lg shadow p-5 border border-purple-200">
                 <h3 className="font-bold text-lg mb-2 text-purple-900">{req.local_name}</h3>
-                <p className="text-sm text-purple-700 mb-1">URL: {req.base_url}</p>
+                <p className="text-sm text-purple-700 mb-1">Sistema: {req.system_type}</p>
+                <p className="text-sm text-purple-700 mb-1">Conector: {req.connector_slug}</p>
+                <p className="text-sm text-purple-700 mb-1">Equipo: {req.device_name || req.local_name}</p>
                 <p className="text-sm text-purple-700 mb-3">
                   Hace: {Math.round((new Date() - new Date(req.requested_at)) / 60000)} min
                 </p>
@@ -236,22 +237,30 @@ export default function YummyInstallations() {
         </div>
       )}
 
-      <h2 className="text-xl font-bold mb-4">Terminales Vinculadas</h2>
+      <h2 className="text-xl font-bold mb-4">Instalaciones Vinculadas</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {installations.map(inst => (
           <div key={inst.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
             <h3 className="font-bold text-lg mb-2">{inst.local_name}</h3>
             <p className="text-sm text-gray-500 mb-1">ID: {inst.local_id}</p>
-            <p className="text-sm text-gray-500 mb-3">URL: {inst.base_url}</p>
+            <p className="text-sm text-gray-500 mb-1">Sistema: {inst.system_type}</p>
+            <p className="text-sm text-gray-500 mb-3">Conector: {inst.connector_slug}</p>
             
             <div className="flex items-center mb-4">
               <span className={"px-2 py-1 text-xs font-semibold rounded-full " + (
                 inst.connection_status === 'ONLINE' ? 'bg-green-100 text-green-800' :
+                inst.connection_status === 'OFFLINE' ? 'bg-gray-200 text-gray-700' :
                 inst.connection_status === 'ERROR' ? 'bg-red-100 text-red-800' :
                 'bg-yellow-100 text-yellow-800'
               )}>
                 {inst.connection_status}
               </span>
+            </div>
+
+            <div className="text-xs text-gray-500 mb-4 space-y-1">
+              <p>Equipo: {inst.device_name || 'Sin informar'}</p>
+              <p>Último heartbeat: {inst.last_health_check ? new Date(inst.last_health_check).toLocaleString() : 'Nunca'}</p>
+              <p>Última sync: {inst.last_sync_at ? new Date(inst.last_sync_at).toLocaleString() : 'Nunca'}</p>
             </div>
 
             <div className="space-y-2">

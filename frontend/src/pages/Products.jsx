@@ -1,328 +1,131 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Products() {
-  const { token } = useAuth();
+  const { token, currentLocation } = useAuth();
+  const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null); // null = Create, object = Edit
-  
-  // Form State
-  const [formData, setFormData] = useState({ name: '', price: 0, stock: 0 });
-  const [isSaving, setIsSaving] = useState(false);
-
-  const fetchProducts = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/v1/data/products`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data);
-      }
-    } catch (e) {
-      console.error("Error", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchProducts();
-  }, [token]);
-
-  const handleOpenCreate = () => {
-    setEditingProduct(null);
-    setFormData({ name: '', price: 0, stock: 0 });
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (p) => {
-    setEditingProduct(p);
-    setFormData({ name: p.name, price: p.price, stock: p.stock });
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingProduct(null);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    
-    const url = editingProduct 
-      ? `/api/v1/data/products/${editingProduct.id}`
-      : `/api/v1/data/products`;
-      
-    const method = editingProduct ? 'PUT' : 'POST';
-
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-      
-      if (res.ok) {
-        await fetchProducts(); // Refresh list
-        closeModal();
-      } else {
-        alert("Hubo un error al guardar el producto");
+    const fetchCatalog = async () => {
+      if (!currentLocation?.id) {
+        setCategories([]);
+        setProducts([]);
+        setLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error("Error saving:", error);
-      alert("Error de conexión al guardar");
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`¿Estás seguro de que quieres eliminar DEFINITIVAMENTE el producto "${name}"? Esto afectará a la base de datos de Yummy.`)) return;
-    
-    try {
-      const res = await fetch(`/api/v1/data/products/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (res.ok) {
-        await fetchProducts();
-      } else {
-        alert("No se pudo eliminar el producto");
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/v1/yummy-installations/${currentLocation.id}/catalog`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCategories(data.categories || []);
+          setProducts(data.products || []);
+        } else {
+          setCategories([]);
+          setProducts([]);
+        }
+      } catch (error) {
+        console.error('Error fetching synced catalog:', error);
+        setCategories([]);
+        setProducts([]);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error deleting:", error);
-      alert("Error de conexión al eliminar");
-    }
-  };
+    };
 
-  const handleAddStock = async (p) => {
-    const qtyToAdd = window.prompt(`¿Cuánto stock deseas AÑADIR a "${p.name}"? (Stock actual: ${p.stock})`);
-    if (!qtyToAdd) return;
-    
-    const qty = parseInt(qtyToAdd, 10);
-    if (isNaN(qty) || qty === 0) {
-      alert("Por favor ingresa un número válido (puede ser negativo para restar).");
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/v1/data/products/${p.id}`, {
-        method: 'PUT',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ name: p.name, price: p.price, stock: p.stock + qty })
-      });
-      
-      if (res.ok) {
-        await fetchProducts();
-      } else {
-        alert("Error al actualizar el stock.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Error de red.");
-    }
-  };
-
-  const saveOrder = async (newProductsList) => {
-    try {
-      const orderedIds = newProductsList.map(p => p.id);
-      await fetch(`/api/v1/data/products/reorder`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ ordered_ids: orderedIds })
-      });
-    } catch (e) {
-      console.error("Error reordering:", e);
-    }
-  };
-
-  const handleMoveUp = (index) => {
-    if (index === 0) return;
-    const newProducts = [...products];
-    const temp = newProducts[index];
-    newProducts[index] = newProducts[index - 1];
-    newProducts[index - 1] = temp;
-    setProducts(newProducts);
-    saveOrder(newProducts);
-  };
-
-  const handleMoveDown = (index) => {
-    if (index === products.length - 1) return;
-    const newProducts = [...products];
-    const temp = newProducts[index];
-    newProducts[index] = newProducts[index + 1];
-    newProducts[index + 1] = temp;
-    setProducts(newProducts);
-    saveOrder(newProducts);
-  };
+    fetchCatalog();
+  }, [token, currentLocation?.id]);
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">Catálogo de Productos</h2>
-          <p className="text-gray-400 text-sm mt-1">Gestión directa en tiempo real sobre Yummy POS</p>
+          <h2 className="text-2xl font-bold text-white">Catálogo Sincronizado</h2>
+          <p className="text-gray-400 text-sm mt-1">
+            Datos centralizados del local activo. Esta vista no depende de una consulta en vivo.
+          </p>
         </div>
-        <button 
-          onClick={handleOpenCreate}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-lg shadow-blue-500/30 transition-colors"
-        >
-          + Nuevo Producto
-        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-5">
+          <div className="text-gray-400 text-sm">Local activo</div>
+          <div className="text-white font-bold mt-1">{currentLocation?.name || 'Sin local seleccionado'}</div>
+        </div>
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-5">
+          <div className="text-gray-400 text-sm">Categorías</div>
+          <div className="text-white font-bold mt-1">{categories.length}</div>
+        </div>
+        <div className="bg-gray-800 rounded-xl border border-gray-700 p-5">
+          <div className="text-gray-400 text-sm">Productos</div>
+          <div className="text-white font-bold mt-1">{products.length}</div>
+        </div>
+      </div>
+
+      <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 mb-6">
+        <h3 className="text-lg font-semibold text-white mb-3">Categorías sincronizadas</h3>
+        {categories.length === 0 ? (
+          <p className="text-gray-500 text-sm">Todavía no hay categorías sincronizadas.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {categories.map((category) => (
+              <span
+                key={category.id}
+                className="px-3 py-1 rounded-full text-sm bg-blue-500/20 text-blue-300 border border-blue-500/30"
+              >
+                {category.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-lg">
         {loading ? (
-          <div className="p-8 text-center text-gray-500">Cargando datos...</div>
+          <div className="p-8 text-center text-gray-500">Cargando catálogo central...</div>
         ) : (
           <table className="w-full text-left text-sm text-gray-400">
             <thead className="bg-gray-900 text-gray-300 uppercase font-semibold">
               <tr>
-                <th className="px-6 py-4 w-24">Orden</th>
                 <th className="px-6 py-4">Nombre</th>
+                <th className="px-6 py-4">Categoría</th>
                 <th className="px-6 py-4">Precio</th>
                 <th className="px-6 py-4">Stock</th>
                 <th className="px-6 py-4">Estado</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {products.map((p, index) => (
-                <tr key={p.id} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
+              {products.map((product) => (
+                <tr key={product.id} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
+                  <td className="px-6 py-4 font-medium text-white">{product.name}</td>
                   <td className="px-6 py-4">
-                    <div className="flex flex-col gap-1 items-start justify-center">
-                      <button 
-                        onClick={() => handleMoveUp(index)} 
-                        disabled={index === 0}
-                        className="text-gray-500 hover:text-white disabled:opacity-30 p-1"
-                        title="Subir"
-                      >
-                        ▲
-                      </button>
-                      <button 
-                        onClick={() => handleMoveDown(index)} 
-                        disabled={index === products.length - 1}
-                        className="text-gray-500 hover:text-white disabled:opacity-30 p-1"
-                        title="Bajar"
-                      >
-                        ▼
-                      </button>
-                    </div>
+                    {categories.find((category) => category.external_id === product.category_external_id)?.name || 'Sin categoría'}
                   </td>
-                  <td className="px-6 py-4 font-medium text-white">{p.name}</td>
-                  <td className="px-6 py-4">${p.price.toLocaleString()}</td>
-                  <td className="px-6 py-4">{p.stock}</td>
+                  <td className="px-6 py-4">${Number(product.price || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4">{Number(product.stock || 0).toLocaleString()}</td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {p.active ? 'Activo' : 'Inactivo'}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${product.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {product.active ? 'Activo' : 'Inactivo'}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => handleAddStock(p)} className="text-emerald-400 hover:text-emerald-300 mr-3 font-semibold transition-colors">+ Stock</button>
-                    <button onClick={() => handleOpenEdit(p)} className="text-blue-400 hover:text-blue-300 mr-3 transition-colors">Editar</button>
-                    <button onClick={() => handleDelete(p.id, p.name)} className="text-red-400 hover:text-red-300 transition-colors">Eliminar</button>
                   </td>
                 </tr>
               ))}
               {products.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">No hay productos registrados en Yummy POS.</td>
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                    No hay productos sincronizados todavía.
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         )}
       </div>
-
-      {/* Modal CRUD */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-700 flex justify-between items-center bg-gray-900">
-              <h3 className="text-lg font-bold text-white">
-                {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-              </h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-white transition-colors">
-                ✕
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Nombre del Producto *</label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  placeholder="Ej: Promo Hamburguesa"
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Precio ($) *</label>
-                  <input 
-                    type="number" 
-                    required
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Stock Actual *</label>
-                  <input 
-                    type="number" 
-                    required
-                    min="0"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({...formData, stock: parseInt(e.target.value) || 0})}
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3">
-                <button 
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 rounded-lg font-medium text-gray-300 hover:bg-gray-700 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 transition-colors disabled:opacity-50"
-                >
-                  {isSaving ? 'Guardando...' : 'Guardar Producto'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
