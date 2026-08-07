@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.services.extractor_modules import ModulesExtractor
@@ -95,8 +95,14 @@ def get_empleado_novedades(db: Session = Depends(deps.get_yummy_db)):
     return ModulesExtractor.get_empleado_novedades(db)
 
 @router.post("/employees/{employee_id}/novedad")
-def add_empleado_novedad(employee_id: int, data: NovedadData, db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.add_empleado_novedad(db, employee_id, data.dict())
+def add_empleado_novedad(employee_id: int, data: NovedadData):
+    client = get_integration_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Yummy is not ONLINE")
+    payload = client.request("POST", f"/api/integration/employees/{employee_id}/novedades", payload=data.dict())
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
 
 @router.get("/caja")
 def get_caja(db: Session = Depends(deps.get_yummy_db)):
@@ -136,9 +142,41 @@ def get_dashboard_metrics(db: Session = Depends(deps.get_db)):
         
     client = YummyIntegrationClient(install.base_url, install.api_key)
     try:
-        # El endpoint remoto debe devolver el estado del dashboard local
-        metrics_data = client.get_metrics()
-        return metrics_data
+        summary_response = client.request("GET", "/api/dashboard")
+        summary = summary_response.get("data", summary_response) if isinstance(summary_response, dict) else {}
+
+        stock_rows = client.execute_sql(
+            """
+            SELECT id, name, COALESCE(stock_quantity, 0) as stock
+            FROM productos
+            ORDER BY COALESCE(stock_quantity, 0) ASC, name ASC
+            """,
+            {},
+        )
+        stock_levels = []
+        for row in (stock_rows or {}).get("rows", []):
+            stock_levels.append({
+                "id": row[0],
+                "name": row[1],
+                "stock": float(row[2] or 0),
+            })
+
+        product_sales = []
+        for item in summary.get("best_sellers", []) or []:
+            sold = float(item.get("sold") or 0)
+            product_sales.append({
+                "name": item.get("product_name") or "",
+                "sold_turno": sold,
+                "sold_dia": sold,
+            })
+
+        return {
+            "ventas_turno": float(((summary.get("cash_day") or {}).get("sales_total")) or ((summary.get("sales_day") or {}).get("total")) or 0),
+            "pedidos_activos": int(summary.get("pending_orders") or 0),
+            "pedidos_finalizados": int(summary.get("delivered_orders") or 0),
+            "product_sales": product_sales,
+            "stock_levels": stock_levels,
+        }
     except Exception as e:
         print("Error fetching metrics from remote:", e)
         return {
@@ -160,10 +198,13 @@ def dump_schema(db: Session = Depends(deps.get_yummy_db)):
         return {"error": str(e)}
 
 @router.get("/cocina/pedidos")
-def get_cocina_pedidos(db: Session = Depends(deps.get_yummy_db)):
+def get_cocina_pedidos():
     try:
-        from app.services.extractor_modules import ModulesExtractor
-        return ModulesExtractor.get_active_pedidos(db)
+        client = get_integration_client()
+        if not client:
+            return []
+        parsed = client.request("GET", "/api/pedidos")
+        return parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
     except Exception as e:
         print("Error fetching pedidos:", e)
         return []

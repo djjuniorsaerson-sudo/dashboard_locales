@@ -75,10 +75,15 @@ export default function Cocina() {
     return Math.floor(diffMs / 60000); // Minutos de demora
   };
 
-  // Filtrar según lógica Yummy
-  // Temporary override: show all orders for debugging
-  const kitchen1Orders = orders;
-  const kitchen2Orders = orders;
+  const kitchen1Orders = orders.filter((order) => {
+    const ticket = order.kitchen_tickets?.kitchen1;
+    return Boolean(ticket?.visible) && Array.isArray(ticket?.items) && ticket.items.length > 0 && ticket.status !== 'done';
+  });
+
+  const kitchen2Orders = orders.filter((order) => {
+    const ticket = order.kitchen_tickets?.kitchen2;
+    return Boolean(ticket?.visible) && Array.isArray(ticket?.items) && ticket.items.length > 0 && ticket.status !== 'done';
+  });
 
   const readyOrders = orders.filter(o => o.status === 'Listo' && o.archived === false);
 
