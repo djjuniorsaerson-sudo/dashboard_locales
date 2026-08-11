@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Empleados() {
-  const { token } = useAuth();
+  const { token, currentLocation } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [novedades, setNovedades] = useState([]);
@@ -11,9 +11,19 @@ export default function Empleados() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState(null); // 'adelanto' | 'falta'
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
   // Form State
   const [formData, setFormData] = useState({ amount: 0, notes: '' });
+  const [editForm, setEditForm] = useState({
+    name: '',
+    role: '',
+    phone: '',
+    salary_base: 0,
+    profile_image: '',
+    notes: '',
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchEmployees = async () => {
@@ -64,6 +74,24 @@ export default function Empleados() {
     setModalType(null);
   };
 
+  const openEditModal = (employee) => {
+    setEditingEmployee(employee);
+    setEditForm({
+      name: employee?.name || '',
+      role: employee?.role || '',
+      phone: employee?.phone || '',
+      salary_base: employee?.salary_base || 0,
+      profile_image: employee?.profile_image || '',
+      notes: employee?.notes || '',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setEditingEmployee(null);
+    setIsEditModalOpen(false);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -92,6 +120,72 @@ export default function Empleados() {
     } catch (error) {
       console.error("Error saving:", error);
       alert("Error de conexión");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingEmployee || !currentLocation?.id) {
+      alert('No hay un local activo seleccionado.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/v1/data/employees/${editingEmployee.id}?installation_id=${encodeURIComponent(currentLocation.id)}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...editingEmployee,
+          ...editForm,
+          salary_base: Number(editForm.salary_base || 0),
+        }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || 'No se pudo actualizar el empleado');
+      }
+      await fetchEmployees();
+      await fetchNovedades();
+      closeEditModal();
+    } catch (error) {
+      console.error("Error updating employee", error);
+      alert(error.message || "No se pudo actualizar el empleado");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetEmployee = async (employee) => {
+    if (!currentLocation?.id) {
+      alert('No hay un local activo seleccionado.');
+      return;
+    }
+    const confirmed = window.confirm(`Se van a borrar faltas, adelantos y pagos de ${employee.name}. ¿Querés continuar?`);
+    if (!confirmed) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/v1/data/employees/${employee.id}/reset?installation_id=${encodeURIComponent(currentLocation.id)}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || 'No se pudo reiniciar el empleado');
+      }
+      await fetchEmployees();
+      await fetchNovedades();
+    } catch (error) {
+      console.error("Error resetting employee", error);
+      alert(error.message || "No se pudo reiniciar el empleado");
     } finally {
       setIsSaving(false);
     }
@@ -148,6 +242,19 @@ export default function Empleados() {
                         className="text-xs bg-orange-600/20 text-orange-400 border border-orange-500/30 px-3 py-1.5 rounded hover:bg-orange-600/40 transition-colors"
                       >
                         + Falta
+                      </button>
+                      <button
+                        onClick={() => openEditModal(e)}
+                        className="text-xs bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded hover:bg-emerald-600/40 transition-colors"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleResetEmployee(e)}
+                        disabled={isSaving}
+                        className="text-xs bg-red-600/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-600/40 transition-colors disabled:opacity-50"
+                      >
+                        Reiniciar
                       </button>
                     </td>
                   </tr>
@@ -259,6 +366,83 @@ export default function Empleados() {
                   className={`px-4 py-2 rounded-lg font-medium text-white shadow-lg transition-colors disabled:opacity-50 ${modalType === 'falta' ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-500/30' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30'}`}
                 >
                   {isSaving ? 'Guardando...' : 'Confirmar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isEditModalOpen && editingEmployee && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-full max-w-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-700 bg-emerald-900/20 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-white">Editar Empleado</h3>
+              <button onClick={closeEditModal} className="text-gray-400 hover:text-white transition-colors">✕</button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Nombre</label>
+                  <input
+                    required
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Puesto</label>
+                  <input
+                    required
+                    value={editForm.role}
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Teléfono</label>
+                  <input
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Sueldo base</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editForm.salary_base}
+                    onChange={(e) => setEditForm({ ...editForm, salary_base: e.target.value })}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Foto cargada o URL</label>
+                <input
+                  value={editForm.profile_image}
+                  onChange={(e) => setEditForm({ ...editForm, profile_image: e.target.value })}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Notas</label>
+                <textarea
+                  rows="4"
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                />
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={closeEditModal} className="px-4 py-2 rounded-lg font-medium text-gray-300 hover:bg-gray-700 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={isSaving} className="px-4 py-2 rounded-lg font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50">
+                  {isSaving ? 'Guardando...' : 'Guardar cambios'}
                 </button>
               </div>
             </form>

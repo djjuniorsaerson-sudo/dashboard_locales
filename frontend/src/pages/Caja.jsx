@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Caja() {
-  const { token } = useAuth();
+  const { token, currentLocation } = useAuth();
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedDays, setExpandedDays] = useState({});
@@ -19,6 +19,107 @@ export default function Caja() {
     shift_name: 'manana'
   });
   const [submitting, setSubmitting] = useState(false);
+
+  const buildCashClosureHtml = (summary) => {
+    const formatMoney = (amount) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(Number(amount || 0));
+    const rows = Array.isArray(summary?.movements) ? summary.movements : [];
+    const products = Array.isArray(summary?.products) ? summary.products : [];
+    const sales = Array.isArray(summary?.sales) ? summary.sales : [];
+    return `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cierre de caja ${summary?.date || ''}</title>
+    <style>
+      @page { size: A4; margin: 16mm; }
+      body { font-family: Arial, sans-serif; color: #111827; font-size: 12px; }
+      h1, h2, h3 { margin: 0 0 8px; }
+      .header { margin-bottom: 16px; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+      .card { border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; }
+      .label { font-size: 10px; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
+      .value { font-size: 16px; font-weight: 700; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; }
+      th { background: #f3f4f6; }
+      .section { margin-top: 18px; }
+      .right { text-align: right; }
+      .muted { color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Cierre de Caja</h1>
+      <div class="muted">Local: ${currentLocation?.name || 'Local activo'}</div>
+      <div class="muted">Fecha: ${summary?.date || '-'}</div>
+      <div class="muted">Turno: ${summary?.shift || '-'}</div>
+      <div class="muted">Rango: ${summary?.start_at || '-'} a ${summary?.end_at || '-'}</div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><div class="label">Saldo inicial</div><div class="value">${formatMoney(summary?.opening_balance)}</div></div>
+      <div class="card"><div class="label">Ventas totales</div><div class="value">${formatMoney(summary?.sales_total)}</div></div>
+      <div class="card"><div class="label">Saldo efectivo</div><div class="value">${formatMoney(summary?.cash_balance)}</div></div>
+      <div class="card"><div class="label">Efectivo</div><div class="value">${formatMoney(summary?.cash_total)}</div></div>
+      <div class="card"><div class="label">Transferencia</div><div class="value">${formatMoney(summary?.transfer_total)}</div></div>
+      <div class="card"><div class="label">Débito</div><div class="value">${formatMoney(summary?.debit_total)}</div></div>
+      <div class="card"><div class="label">Online</div><div class="value">${formatMoney(summary?.online_total)}</div></div>
+      <div class="card"><div class="label">Retiros</div><div class="value">${formatMoney(summary?.withdrawals_total)}</div></div>
+      <div class="card"><div class="label">Vales</div><div class="value">${formatMoney(summary?.vouchers_total)}</div></div>
+    </div>
+
+    <div class="section">
+      <h3>Movimientos de caja</h3>
+      <table>
+        <thead>
+          <tr><th>Tipo</th><th>Notas</th><th>Fecha</th><th class="right">Monto</th></tr>
+        </thead>
+        <tbody>
+          ${rows.length ? rows.map((row) => `<tr><td>${row.movement_type || row.type || '-'}</td><td>${row.notes || '-'}</td><td>${row.created_at || row.movement_date || '-'}</td><td class="right">${formatMoney(row.amount)}</td></tr>`).join('') : '<tr><td colspan="4">Sin movimientos registrados.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h3>Productos vendidos</h3>
+      <table>
+        <thead>
+          <tr><th>Producto</th><th class="right">Cantidad</th><th class="right">Importe</th></tr>
+        </thead>
+        <tbody>
+          ${products.length ? products.map((row) => `<tr><td>${row.product_name || '-'}</td><td class="right">${row.quantity || 0}</td><td class="right">${formatMoney(row.amount)}</td></tr>`).join('') : '<tr><td colspan="3">Sin productos vendidos en este cierre.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h3>Ventas incluidas</h3>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Medio de pago</th><th>Detalle</th><th class="right">Total</th></tr>
+        </thead>
+        <tbody>
+          ${sales.length ? sales.map((sale) => `<tr><td>#${sale.id || '-'}</td><td>${sale.payment_method || '-'}</td><td>${sale.payment_detail || '-'}</td><td class="right">${formatMoney(sale.total)}</td></tr>`).join('') : '<tr><td colspan="4">Sin ventas registradas en este cierre.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>`;
+  };
+
+  const openPrintWindow = (summary) => {
+    const html = buildCashClosureHtml(summary);
+    const printWindow = window.open('', '_blank', 'width=1024,height=900');
+    if (!printWindow) {
+      alert('El navegador bloqueó la ventana de impresión.');
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 300);
+  };
 
   const fetchCaja = async () => {
     try {
@@ -88,16 +189,27 @@ export default function Caja() {
       localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset());
       const localDateString = localDate.toISOString().split('T')[0];
 
-      const payload = {
-        movement_type: modalType,
-        amount: Number(formData.amount),
-        payment_method: formData.payment_method,
-        movement_date: localDateString,
-        notes: finalNotes,
-        employee_name: formData.employee_name
-      };
+      const isCashClose = modalType === 'reset_turno';
+      const endpoint = isCashClose
+        ? `/api/v1/data/caja/reset-turno?installation_id=${encodeURIComponent(currentLocation?.id || '')}`
+        : `/api/v1/data/caja/movimiento`;
 
-      const res = await fetch(`/api/v1/data/caja/movimiento`, {
+      const payload = isCashClose
+        ? {
+            shift: formData.shift_name,
+            movement_date: localDateString,
+            generate_report: true,
+          }
+        : {
+            movement_type: modalType,
+            amount: Number(formData.amount),
+            payment_method: formData.payment_method,
+            movement_date: localDateString,
+            notes: finalNotes,
+            employee_name: formData.employee_name
+          };
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,10 +219,15 @@ export default function Caja() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         setShowModal(false);
-        fetchCaja();
+        await fetchCaja();
+        if (isCashClose) {
+          openPrintWindow(data);
+        }
       } else {
-        alert('Error al registrar movimiento');
+        const error = await res.json().catch(() => ({}));
+        alert(error.detail || 'Error al registrar movimiento');
       }
     } catch (error) {
       console.error("Error saving movimiento", error);
@@ -385,7 +502,7 @@ export default function Caja() {
                 </button>
                 <button 
                   type="submit" 
-                  disabled={submitting}
+                  disabled={submitting || (modalType === 'reset_turno' && !currentLocation?.id)}
                   className={`flex-1 text-white py-2 rounded-lg font-bold transition-colors ${
                     modalType === 'saldo_inicial' ? 'bg-blue-600 hover:bg-blue-700' : 
                     modalType === 'reset_turno' ? 'bg-gray-500 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.services.extractor_modules import ModulesExtractor
+from app.models.user import User
+from app.models.yummy import YummyInstallation
 
 router = APIRouter()
 
@@ -37,11 +39,48 @@ class NovedadData(BaseModel):
     amount: float
     notes: str
 
+
+class EmployeeUpdateData(BaseModel):
+    name: str
+    role: str
+    phone: Optional[str] = ""
+    salary_base: float = 0
+    profile_image: Optional[str] = ""
+    notes: Optional[str] = ""
+    vacation_days: Optional[int] = 0
+    rest_days: Optional[int] = 0
+    absences_count: Optional[int] = 0
+
 class ClientData(BaseModel):
     name: str
     phone: str = ""
     address: str = ""
     notes: str = ""
+
+
+class CashShiftCloseData(BaseModel):
+    shift: str = "general"
+    movement_date: Optional[str] = None
+    generate_report: bool = True
+
+
+def get_integration_client_for_installation(
+    db: Session,
+    current_user: User,
+    installation_id: Optional[str] = None,
+):
+    from app.services.yummy_client import YummyIntegrationClient
+
+    query = db.query(YummyInstallation).filter(
+        YummyInstallation.organization_id == current_user.organization_id,
+        YummyInstallation.connection_status == "ONLINE",
+    )
+    if installation_id:
+        query = query.filter(YummyInstallation.id == installation_id)
+    install = query.order_by(YummyInstallation.last_health_check.desc()).first()
+    if not install:
+        raise HTTPException(status_code=503, detail="Yummy is not ONLINE")
+    return YummyIntegrationClient(install.base_url, install.api_key)
 
 @router.get("/products")
 def get_products(db: Session = Depends(deps.get_yummy_db)):
@@ -100,6 +139,35 @@ def add_empleado_novedad(employee_id: int, data: NovedadData):
     if not client:
         raise HTTPException(status_code=503, detail="Yummy is not ONLINE")
     payload = client.request("POST", f"/api/integration/employees/{employee_id}/novedades", payload=data.dict())
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+@router.put("/employees/{employee_id}")
+def update_employee(
+    employee_id: int,
+    data: EmployeeUpdateData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("PUT", f"/api/integration/employees/{employee_id}", payload=data.model_dump())
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+@router.post("/employees/{employee_id}/reset")
+def reset_employee(
+    employee_id: int,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("POST", f"/api/integration/employees/{employee_id}/reset", payload={})
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
@@ -277,6 +345,39 @@ def add_caja_movimiento(data: CajaMovimientoData):
     except Exception as e:
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/caja/reset-turno")
+def close_cash_shift(
+    data: CashShiftCloseData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("POST", "/api/integration/caja/reset-turno", payload=data.model_dump(exclude_none=True))
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+@router.get("/caja/shift-summary")
+def get_cash_shift_summary(
+    shift: str,
+    movement_date: str = Query(alias="date"),
+    closed_at: Optional[str] = None,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    query = f"/api/integration/caja/shift-summary?date={movement_date}&shift={shift}"
+    if closed_at:
+        query += f"&closed_at={closed_at}"
+    payload = client.request("GET", query)
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
 
 class UsuarioData(BaseModel):
     username: str
