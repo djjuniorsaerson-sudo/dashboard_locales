@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Repartidores() {
-  const { token } = useAuth();
+  const { token, currentLocation } = useAuth();
   const [repartidores, setRepartidores] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -12,6 +12,9 @@ export default function Repartidores() {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [globalHistory, setGlobalHistory] = useState([]);
+  const [deliveredOrders, setDeliveredOrders] = useState([]);
+  const [deliveredSearch, setDeliveredSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const fetchRepartidores = async () => {
@@ -42,14 +45,33 @@ export default function Repartidores() {
       }
     };
 
+    const fetchDeliveredOrders = async () => {
+      try {
+        if (!currentLocation?.id) {
+          setDeliveredOrders([]);
+          return;
+        }
+        const res = await fetch(`/api/v1/data/repartidores/delivered?installation_id=${encodeURIComponent(currentLocation.id)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          setDeliveredOrders(await res.json());
+        }
+      } catch (e) {
+        console.error("Error fetching delivered orders", e);
+      }
+    };
+
     fetchRepartidores();
     fetchGlobalHistory();
+    fetchDeliveredOrders();
     const interval = setInterval(() => {
       fetchRepartidores();
       fetchGlobalHistory();
+      fetchDeliveredOrders();
     }, 15000);
     return () => clearInterval(interval);
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const viewHistory = async (driver) => {
     setSelectedDriver(driver);
@@ -69,6 +91,70 @@ export default function Repartidores() {
     }
   };
 
+  const exportMovimientos = async () => {
+    if (!currentLocation?.id) {
+      alert('No hay un local activo seleccionado.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/v1/data/repartidores/export/xlsx?installation_id=${encodeURIComponent(currentLocation.id)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || 'No se pudo descargar el Excel');
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      const filename = match?.[1] || `repartidores_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting repartidores', error);
+      alert(error.message || 'No se pudo descargar el Excel');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const formatMoney = (amount) => {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('es-AR', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
+  };
+
+  const normalizeSearch = (value) => String(value || '').toLowerCase().trim();
+  const filteredDeliveredOrders = deliveredOrders.filter((row) => {
+    const searchTerm = normalizeSearch(deliveredSearch);
+    if (!searchTerm) {
+      return true;
+    }
+    const totalAmount = Number(row.total_amount || 0);
+    const searchable = normalizeSearch([
+      row.order_id,
+      row.driver_name,
+      row.cashier_name,
+      row.customer_address,
+      formatDateTime(row.marked_at),
+      Math.round(totalAmount),
+      formatMoney(totalAmount),
+    ].join(' '));
+    return searchable.includes(searchTerm);
+  });
+
   return (
     <div className="p-6 relative">
       <div className="flex justify-between items-center mb-6">
@@ -76,6 +162,14 @@ export default function Repartidores() {
           <h2 className="text-2xl font-bold text-white">Flota de Repartidores</h2>
           <p className="text-gray-400 text-sm mt-1">Monitoreo de cadetes y dinero a rendir en tiempo real</p>
         </div>
+        <button
+          onClick={exportMovimientos}
+          disabled={exporting || !currentLocation?.id}
+          className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors"
+        >
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16v-8m0 8l-3-3m3 3l3-3M4 18h16"></path></svg>
+          {exporting ? 'Descargando...' : 'Descargar Excel'}
+        </button>
       </div>
 
       <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-lg mb-8">
@@ -202,6 +296,63 @@ export default function Repartidores() {
             </div>
         </div>
 
+      </div>
+
+      <div className="mt-6 bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-sm">
+        <div className="p-4 border-b border-gray-700 bg-gray-900">
+          <h3 className="font-bold text-white text-lg">Delivery Entregados</h3>
+          <p className="text-gray-400 text-sm mt-1">Solo pedidos marcados como listos desde Salida Delivery.</p>
+        </div>
+        <div className="p-4 border-b border-gray-700 bg-gray-800">
+          <input
+            type="text"
+            value={deliveredSearch}
+            onChange={(e) => setDeliveredSearch(e.target.value)}
+            placeholder="Buscar por repartidor, cajera, dirección, monto u hora"
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-gray-400">
+            <thead className="bg-gray-900 text-gray-300 uppercase font-semibold">
+              <tr>
+                <th className="px-6 py-4">Pedido</th>
+                <th className="px-6 py-4">Repartidor</th>
+                <th className="px-6 py-4">Horario</th>
+                <th className="px-6 py-4">Dirección</th>
+                <th className="px-6 py-4">Pago</th>
+                <th className="px-6 py-4 text-right">Monto</th>
+                <th className="px-6 py-4 text-right">Vuelto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDeliveredOrders.map((row) => (
+                <tr key={`${row.order_id}-${row.marked_at}`} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
+                  <td className="px-6 py-4 font-medium text-white">#{row.order_id}</td>
+                  <td className="px-6 py-4 text-white">{row.driver_name || 'Sin repartidor'}</td>
+                  <td className="px-6 py-4">{formatDateTime(row.marked_at)}</td>
+                  <td className="px-6 py-4">{row.customer_address || '-'}</td>
+                  <td className="px-6 py-4">
+                    {row.is_paid ? (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-700 text-white">
+                        PAGADO
+                      </span>
+                    ) : '-'}
+                  </td>
+                  <td className="px-6 py-4 text-right text-white font-semibold">{formatMoney(row.total_amount || 0)}</td>
+                  <td className="px-6 py-4 text-right">{formatMoney(row.change_amount || 0)}</td>
+                </tr>
+              ))}
+              {filteredDeliveredOrders.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                    {deliveredSearch.trim() ? 'No hay pedidos que coincidan con la búsqueda.' : 'No hay pedidos entregados desde salida delivery.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* History Modal */}

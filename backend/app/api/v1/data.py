@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.services.extractor_modules import ModulesExtractor
 from app.models.user import User
 from app.models.yummy import YummyInstallation
+import requests
 
 router = APIRouter()
 
@@ -195,6 +197,44 @@ def get_client_by_phone(phone: str, db: Session = Depends(deps.get_yummy_db)):
 @router.get("/repartidores/history")
 def get_global_repartidor_history(db: Session = Depends(deps.get_yummy_db)):
     return ModulesExtractor.get_global_repartidor_history(db)
+
+
+@router.get("/repartidores/delivered")
+def get_repartidores_delivered(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("GET", "/api/integration/repartidores/delivered")
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+@router.get("/repartidores/export/xlsx")
+def export_repartidores_xlsx(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    url = f"{client.base_url}/api/repartidores/export/xlsx"
+    response = requests.get(url, headers={"X-Integration-Key": client.api_key}, timeout=30)
+    response.raise_for_status()
+    content_type = response.headers.get(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    content_disposition = response.headers.get(
+        "Content-Disposition",
+        "attachment; filename=repartidores.xlsx",
+    )
+    return Response(
+        content=response.content,
+        media_type=content_type,
+        headers={"Content-Disposition": content_disposition},
+    )
 
 @router.get("/dashboard/metrics")
 def get_dashboard_metrics(db: Session = Depends(deps.get_db)):
