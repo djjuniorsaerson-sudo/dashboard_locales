@@ -250,8 +250,7 @@ def get_dashboard_metrics(db: Session = Depends(deps.get_db)):
         
     client = YummyIntegrationClient(install.base_url, install.api_key)
     try:
-        summary_response = client.request("GET", "/api/dashboard")
-        summary = summary_response.get("data", summary_response) if isinstance(summary_response, dict) else {}
+        metrics = client.get_metrics() or {}
 
         stock_rows = client.execute_sql(
             """
@@ -269,19 +268,33 @@ def get_dashboard_metrics(db: Session = Depends(deps.get_db)):
                 "stock": float(row[2] or 0),
             })
 
+        product_sales_rows = client.execute_sql(
+            """
+            SELECT
+                dp.product_name,
+                COALESCE(SUM(dp.quantity), 0) AS sold
+            FROM ventas v
+            JOIN detalle_pedidos dp ON dp.order_id = v.order_id
+            WHERE DATE(v.created_at) = CURRENT_DATE
+            GROUP BY dp.product_name
+            ORDER BY sold DESC, dp.product_name ASC
+            LIMIT 5
+            """,
+            [],
+        )
         product_sales = []
-        for item in summary.get("best_sellers", []) or []:
-            sold = float(item.get("sold") or 0)
+        for row in (product_sales_rows or {}).get("rows", []):
+            sold = float(row[1] or 0)
             product_sales.append({
-                "name": item.get("product_name") or "",
+                "name": row[0] or "",
                 "sold_turno": sold,
                 "sold_dia": sold,
             })
 
         return {
-            "ventas_turno": float(((summary.get("cash_day") or {}).get("sales_total")) or ((summary.get("sales_day") or {}).get("total")) or 0),
-            "pedidos_activos": int(summary.get("pending_orders") or 0),
-            "pedidos_finalizados": int(summary.get("delivered_orders") or 0),
+            "ventas_turno": float(metrics.get("ventas_turno") or 0),
+            "pedidos_activos": int(metrics.get("pedidos_activos") or 0),
+            "pedidos_finalizados": int(metrics.get("pedidos_finalizados") or 0),
             "product_sales": product_sales,
             "stock_levels": stock_levels,
         }
