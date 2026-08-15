@@ -67,12 +67,78 @@ export default function Cocina() {
     }
   };
 
-  const calculateDelay = (orderTime) => {
-    if (!orderTime) return 0;
-    const orderDate = new Date(orderTime);
+  const parseServerDateTime = (value) => {
+    if (value instanceof Date) {
+      return value;
+    }
+    const raw = String(value || '').trim();
+    if (!raw) {
+      return null;
+    }
+    const gmtMatch = raw.match(/^[A-Za-z]{3}, (\d{2}) ([A-Za-z]{3}) (\d{4}) (\d{2}):(\d{2})(?::(\d{2}))? GMT$/);
+    if (gmtMatch) {
+      const [, day, monthLabel, year, hours, minutes, seconds = '00'] = gmtMatch;
+      const monthMap = {
+        Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+        Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+      };
+      return new Date(
+        Number(year),
+        monthMap[monthLabel] ?? 0,
+        Number(day),
+        Number(hours),
+        Number(minutes),
+        Number(seconds),
+      );
+    }
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const parseScheduledOrderDate = (order) => {
+    const orderTime = String(order?.order_time || '').trim();
+    if (!orderTime) {
+      return null;
+    }
+    const [hours, minutes] = orderTime.split(':').map((value) => Number(value || 0));
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+      return null;
+    }
+    const createdAt = parseServerDateTime(order?.created_at || new Date().toISOString());
+    if (!(createdAt instanceof Date) || Number.isNaN(createdAt.getTime())) {
+      return null;
+    }
+    let scheduledAt = new Date(
+      createdAt.getFullYear(),
+      createdAt.getMonth(),
+      createdAt.getDate(),
+      hours,
+      minutes,
+      0,
+      0,
+    );
+    const diffMs = createdAt.getTime() - scheduledAt.getTime();
+    if (Number.isFinite(diffMs) && diffMs > (6 * 60 * 60 * 1000)) {
+      scheduledAt = new Date(scheduledAt.getTime() + (24 * 60 * 60 * 1000));
+    }
+    return scheduledAt;
+  };
+
+  const calculateDelay = (order) => {
     const now = new Date();
-    const diffMs = now - orderDate;
-    return Math.floor(diffMs / 60000); // Minutos de demora
+    const created = parseServerDateTime(order?.created_at || '');
+    const scheduledAt = parseScheduledOrderDate(order);
+    let reference = created;
+    if (scheduledAt instanceof Date && !Number.isNaN(scheduledAt.getTime())) {
+      if (!(created instanceof Date) || Number.isNaN(created.getTime()) || scheduledAt.getTime() >= created.getTime()) {
+        reference = scheduledAt;
+      }
+    }
+    if (!(reference instanceof Date) || Number.isNaN(reference.getTime())) {
+      return 0;
+    }
+    const elapsed = (now.getTime() - reference.getTime()) / 60000;
+    return Math.max(0, Math.floor(elapsed));
   };
 
   const kitchen1Orders = orders.filter((order) => {
@@ -155,7 +221,7 @@ export default function Cocina() {
                 const ticket = activeTab === 'kitchen1' ? order.kitchen_tickets?.kitchen1 : 
                                activeTab === 'kitchen2' ? order.kitchen_tickets?.kitchen2 : null;
                 
-                const delay = calculateDelay(order.order_time || order.created_at);
+                const delay = calculateDelay(order);
                 const isCritical = delay >= 20;
                 const isWarning = delay >= 10 && delay < 20;
 
