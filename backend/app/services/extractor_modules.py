@@ -468,8 +468,20 @@ class ModulesExtractor:
                 ventas = db.execute(ventas_query, [day_str]).fetchall()
                 
                 shifts = []
+                def extract_shift_label(notes_value):
+                    text = str(notes_value or "").strip()
+                    if not text:
+                        return ""
+                    lower_text = text.lower()
+                    marker = "turno:"
+                    if marker in lower_text:
+                        idx = lower_text.index(marker) + len(marker)
+                        return text[idx:].strip() or ""
+                    return ""
+
                 current_shift = {
                     "shift_id": 1,
+                    "shift_label": "",
                     "saldo_inicial": 0.0,
                     "ingresos": 0.0,
                     "salidas": 0.0,
@@ -501,18 +513,25 @@ class ModulesExtractor:
                         m = ev["data"]
                         m_type = m[1]
                         amount = float(m[2] or 0)
-                        current_shift["movimientos"].append({"type": m_type, "amount": amount, "time": normalize_datetime(m[3]), "notes": m[4]})
+                        movement_notes = m[4]
+                        current_shift["movimientos"].append({"type": m_type, "amount": amount, "time": normalize_datetime(m[3]), "notes": movement_notes})
                         
                         if m_type == 'saldo_inicial':
                             current_shift["saldo_inicial"] += amount
+                            shift_label = extract_shift_label(movement_notes)
+                            if shift_label:
+                                current_shift["shift_label"] = shift_label
                         elif m_type in ('retiro', 'vale', 'perdida'):
                             current_shift["salidas"] += amount
                         elif m_type == 'reset_turno':
+                            if not current_shift.get("shift_label"):
+                                current_shift["shift_label"] = extract_shift_label(movement_notes) or current_shift.get("shift_label") or ""
                             current_shift["end_time"] = normalize_datetime(m[3])
                             shifts.append(current_shift)
                             shift_counter += 1
                             current_shift = {
                                 "shift_id": shift_counter,
+                                "shift_label": "",
                                 "saldo_inicial": 0.0,
                                 "ingresos": 0.0,
                                 "salidas": 0.0,
@@ -556,8 +575,13 @@ class ModulesExtractor:
                             current_shift["efectivo"] += v_total
                 
                 # Añadir el último turno del día (puede estar abierto)
-                current_shift["end_time"] = f"{day_str}T23:59:59"
-                shifts.append(current_shift)
+                if (
+                    current_shift["saldo_inicial"] > 0
+                    or current_shift["ingresos"] > 0
+                    or current_shift["salidas"] > 0
+                    or current_shift["movimientos"]
+                ):
+                    shifts.append(current_shift)
                 
                 # Totales del día
                 day_ingresos = sum(s["ingresos"] for s in shifts)

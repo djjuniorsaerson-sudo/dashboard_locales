@@ -269,6 +269,17 @@ export default function Caja() {
     };
   };
 
+  const formatShiftLabel = (shift) => {
+    const label = String(shift?.shift_label || '').trim();
+    if (label) {
+      return `Turno ${label}`;
+    }
+    if (shift?.shift_id) {
+      return `Turno ${shift.shift_id}`;
+    }
+    return 'Turno';
+  };
+
   return (
     <div className="p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -329,7 +340,7 @@ export default function Caja() {
                             <div>
                               <span className="block text-gray-500">Turno actual</span>
                               <span className="text-gray-200 font-semibold">
-                                {summary.activeShift ? `Turno ${summary.activeShift.shift_id}` : '-'}
+                                {summary.activeShift ? formatShiftLabel(summary.activeShift) : '-'}
                               </span>
                             </div>
                             <div>
@@ -440,7 +451,7 @@ export default function Caja() {
                       <div key={idx} className="bg-gray-900 rounded-xl p-4 border border-gray-700">
                         <div className="flex flex-col md:flex-row justify-between mb-4 pb-4 border-b border-gray-800">
                           <div>
-                            <h5 className="font-bold text-lg text-white">Turno {shift.shift_id}</h5>
+                            <h5 className="font-bold text-lg text-white">{formatShiftLabel(shift)}</h5>
                             <p className="text-xs text-gray-500">
                               Apertura: {formatTime(shift.start_time)} 
                               {shift.end_time ? ` - Cierre: ${formatTime(shift.end_time)}` : ' - Caja abierta'}
