@@ -240,6 +240,35 @@ export default function Caja() {
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
   };
 
+  const formatDateLabel = (dateValue) => {
+    return new Date(`${dateValue}T00:00:00`).toLocaleDateString('es-AR', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (value) => {
+    if (!value) return '-';
+    return new Date(value).toLocaleTimeString('es-AR');
+  };
+
+  const getDaySummary = (dayReport) => {
+    const openingBalance = dayReport.shifts.reduce((acc, shift) => acc + Number(shift.saldo_inicial || 0), 0);
+    const totalSales = Number(dayReport.total_ingresos || 0);
+    const totalWithdrawals = Number(dayReport.total_salidas || 0);
+    const expectedCash = openingBalance + Number(dayReport.efectivo || 0) - totalWithdrawals;
+    const activeShift = dayReport.shifts.find((shift) => !shift.end_time) || dayReport.shifts[dayReport.shifts.length - 1] || null;
+    return {
+      openingBalance,
+      totalSales,
+      totalWithdrawals,
+      expectedCash,
+      activeShift,
+    };
+  };
+
   return (
     <div className="p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -270,44 +299,102 @@ export default function Caja() {
            <div className="p-8 text-center text-gray-500 bg-gray-800 rounded-xl">No hay datos de caja registrados recientes.</div>
         ) : (
           reportes.map((dayReport) => (
-            <div key={dayReport.date} className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-lg">
+            <div key={dayReport.date} className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden shadow-lg">
               {/* Encabezado del Día */}
+              {(() => {
+                const summary = getDaySummary(dayReport);
+                return (
               <div 
-                className="bg-gray-900 p-4 md:px-6 md:py-5 flex flex-col md:flex-row justify-between items-center cursor-pointer hover:bg-gray-850 transition-colors"
+                className="bg-gray-900 p-5 md:px-6 md:py-6 cursor-pointer hover:bg-gray-850 transition-colors"
                 onClick={() => toggleDay(dayReport.date)}
               >
-                <div className="flex items-center space-x-4 mb-4 md:mb-0">
-                  <div className={`p-2 rounded-lg ${expandedDays[dayReport.date] ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
-                    <svg className={`w-6 h-6 transform transition-transform ${expandedDays[dayReport.date] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
+                  <div className="flex items-start gap-4">
+                    <div className={`p-2 rounded-lg mt-1 ${expandedDays[dayReport.date] ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                      <svg className={`w-6 h-6 transform transition-transform ${expandedDays[dayReport.date] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-white capitalize">{formatDateLabel(dayReport.date)}</h3>
+                        <p className="text-sm text-gray-400">{dayReport.shifts.length} turnos registrados</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <div className="bg-gray-800/90 border border-gray-700 rounded-xl px-4 py-3 min-w-[260px]">
+                          <p className="text-xs font-bold uppercase tracking-wide text-blue-400">Estado de caja ahora</p>
+                          <p className="mt-1 text-lg font-bold text-white">
+                            {summary.activeShift && !summary.activeShift.end_time ? 'Caja abierta' : 'Caja cerrada'}
+                          </p>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-400">
+                            <div>
+                              <span className="block text-gray-500">Turno actual</span>
+                              <span className="text-gray-200 font-semibold">
+                                {summary.activeShift ? `Turno ${summary.activeShift.shift_id}` : '-'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-gray-500">Apertura</span>
+                              <span className="text-gray-200 font-semibold">
+                                {summary.activeShift ? formatTime(summary.activeShift.start_time) : '-'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-gray-800/90 border border-gray-700 rounded-xl px-4 py-3 min-w-[260px]">
+                          <p className="text-xs font-bold uppercase tracking-wide text-emerald-400">Resumen rápido</p>
+                          <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="block text-gray-500 text-xs">Saldo inicial</span>
+                              <span className="text-white font-bold">{formatMoney(summary.openingBalance)}</span>
+                            </div>
+                            <div>
+                              <span className="block text-gray-500 text-xs">Cobrado hoy</span>
+                              <span className="text-emerald-400 font-bold">{formatMoney(summary.totalSales)}</span>
+                            </div>
+                            <div>
+                              <span className="block text-gray-500 text-xs">Retiros</span>
+                              <span className="text-red-400 font-bold">-{formatMoney(summary.totalWithdrawals)}</span>
+                            </div>
+                            <div>
+                              <span className="block text-gray-500 text-xs">Efectivo esperado</span>
+                              <span className="text-blue-300 font-bold">{formatMoney(summary.expectedCash)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">{new Date(dayReport.date + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
-                    <p className="text-sm text-gray-400">{dayReport.shifts.length} Turnos registrados</p>
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap gap-4 text-right">
-                  <div className="bg-gray-800 px-4 py-2 rounded-lg border border-gray-700 hidden lg:block">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Total Recaudado</p>
-                    <p className="text-lg font-bold text-emerald-500">{formatMoney(dayReport.total_ingresos)}</p>
-                  </div>
-                  <div className="bg-gray-800 px-4 py-2 rounded-lg border border-gray-700">
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Salidas Físicas</p>
-                    <p className="text-lg font-bold text-red-400">-{formatMoney(dayReport.total_salidas)}</p>
-                  </div>
-                  <div className="bg-gray-800 px-4 py-2 rounded-lg border-2 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]">
-                    <p className="text-xs text-blue-400 font-bold uppercase tracking-wide">Efectivo en Caja</p>
-                    <p className="text-xl font-black text-white">{formatMoney((dayReport.shifts.reduce((acc, s) => acc + s.saldo_inicial, 0)) + dayReport.efectivo - dayReport.total_salidas)}</p>
+
+                  <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 xl:min-w-[620px]">
+                    <div className="bg-gray-800 px-4 py-3 rounded-xl border border-gray-700">
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Saldo inicial</p>
+                      <p className="text-lg font-bold text-white mt-1">{formatMoney(summary.openingBalance)}</p>
+                    </div>
+                    <div className="bg-gray-800 px-4 py-3 rounded-xl border border-gray-700">
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Cobrado hoy</p>
+                      <p className="text-lg font-bold text-emerald-500 mt-1">{formatMoney(summary.totalSales)}</p>
+                    </div>
+                    <div className="bg-gray-800 px-4 py-3 rounded-xl border border-gray-700">
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Retiros</p>
+                      <p className="text-lg font-bold text-red-400 mt-1">-{formatMoney(summary.totalWithdrawals)}</p>
+                    </div>
+                    <div className="bg-gray-800 px-4 py-3 rounded-xl border-2 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
+                      <p className="text-xs text-blue-400 font-bold uppercase tracking-wide">Efectivo esperado</p>
+                      <p className="text-xl font-black text-white mt-1">{formatMoney(summary.expectedCash)}</p>
+                    </div>
                   </div>
                 </div>
               </div>
+                );
+              })()}
 
               {/* Contenido Desplegable */}
               {expandedDays[dayReport.date] && (
                 <div className="p-6 bg-gray-800/50 border-t border-gray-700">
                   
                   {/* Desglose de Métodos de Pago del Día */}
-                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Métodos de Pago (Todo el Día)</h4>
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Ventas por medio de pago</h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
                     <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
                       <div className="flex items-center text-green-400 mb-1">
@@ -347,7 +434,7 @@ export default function Caja() {
                   </div>
 
                   {/* Turnos */}
-                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Detalle por Turnos</h4>
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Turnos del día</h4>
                   <div className="space-y-4">
                     {dayReport.shifts.map((shift, idx) => (
                       <div key={idx} className="bg-gray-900 rounded-xl p-4 border border-gray-700">
@@ -355,8 +442,8 @@ export default function Caja() {
                           <div>
                             <h5 className="font-bold text-lg text-white">Turno {shift.shift_id}</h5>
                             <p className="text-xs text-gray-500">
-                              Apertura: {new Date(shift.start_time).toLocaleTimeString()} 
-                              {shift.end_time ? ` - Cierre: ${new Date(shift.end_time).toLocaleTimeString()}` : ' - (Turno Abierto)'}
+                              Apertura: {formatTime(shift.start_time)} 
+                              {shift.end_time ? ` - Cierre: ${formatTime(shift.end_time)}` : ' - Caja abierta'}
                             </p>
                           </div>
                           <div className="flex gap-4 mt-2 md:mt-0">
@@ -378,12 +465,19 @@ export default function Caja() {
                         {/* Movimientos del turno */}
                         {shift.movimientos.length > 0 ? (
                           <div>
-                            <p className="text-xs font-bold text-gray-500 mb-2">MOVIMIENTOS DE CAJA REGISTRADOS:</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                            <p className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Movimientos del turno</p>
+                            <div className="space-y-2">
                               {shift.movimientos.map((mov, midx) => (
-                                <div key={midx} className="bg-gray-800 p-2 rounded text-sm flex justify-between items-center">
-                                  <span className="text-gray-400 uppercase text-xs truncate mr-2" title={mov.notes || mov.type}>{mov.type}</span>
-                                  <span className={`font-bold ${mov.type === 'saldo_inicial' ? 'text-blue-400' : 'text-red-400'}`}>
+                                <div key={midx} className="bg-gray-800 p-3 rounded-lg border border-gray-700 text-sm flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-gray-200 uppercase text-xs font-bold tracking-wide truncate" title={mov.notes || mov.type}>
+                                      {mov.type}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate" title={mov.notes || 'Sin observaciones'}>
+                                      {mov.notes || 'Sin observaciones'}
+                                    </p>
+                                  </div>
+                                  <span className={`font-bold whitespace-nowrap ${mov.type === 'saldo_inicial' ? 'text-blue-400' : 'text-red-400'}`}>
                                     {mov.type === 'saldo_inicial' ? '' : '-'}{formatMoney(mov.amount)}
                                   </span>
                                 </div>
@@ -391,7 +485,7 @@ export default function Caja() {
                             </div>
                           </div>
                         ) : (
-                          <p className="text-xs text-gray-600 italic">Sin movimientos de caja físicos en este turno.</p>
+                          <p className="text-xs text-gray-600 italic">Sin movimientos registrados en este turno.</p>
                         )}
                       </div>
                     ))}
