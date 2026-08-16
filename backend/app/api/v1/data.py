@@ -126,6 +126,20 @@ def load_installation_snapshot(
     return None
 
 
+def employees_payload_has_error(payload: list[dict]) -> bool:
+    if not payload:
+        return False
+    first = payload[0] or {}
+    return str(first.get("id")) == "999" or str(first.get("role", "")).strip().lower() == "error"
+
+
+def novedades_payload_has_error(payload: list[dict]) -> bool:
+    if not payload:
+        return False
+    first = payload[0] or {}
+    return str(first.get("id")) == "999" or str(first.get("event_type", "")).strip().lower() == "error"
+
+
 def get_integration_client_for_installation(
     db: Session,
     current_user: User,
@@ -203,6 +217,8 @@ def get_employees(
             remote = deps.RemoteSession(client)
             employees = ModulesExtractor.get_employees(remote)
             novedades = ModulesExtractor.get_empleado_novedades(remote)
+            if employees_payload_has_error(employees) or novedades_payload_has_error(novedades):
+                raise RuntimeError("Remote employees snapshot unavailable")
             save_installation_snapshot(
                 db,
                 install.id,
@@ -232,6 +248,8 @@ def get_empleado_novedades(
             remote = deps.RemoteSession(client)
             employees = ModulesExtractor.get_employees(remote)
             novedades = ModulesExtractor.get_empleado_novedades(remote)
+            if employees_payload_has_error(employees) or novedades_payload_has_error(novedades):
+                raise RuntimeError("Remote employees snapshot unavailable")
             save_installation_snapshot(
                 db,
                 install.id,
