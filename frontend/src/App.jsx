@@ -39,13 +39,38 @@ function MainLayout() {
   const [currentView, setCurrentView] = useState('welcome');
   const [orderToEdit, setOrderToEdit] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleNavigate = (view, options = {}) => {
+    if (options.resetOrder) {
+      setOrderToEdit(null);
+    }
+    setCurrentView(view);
+    setMobileMenuOpen(false);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-950 text-white md:flex">
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar menú"
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
-        <div className="h-[73px] px-6 border-b border-gray-800 flex items-center">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-[88vw] max-w-72 bg-gray-900 border-r border-gray-800 flex flex-col transform transition-transform duration-200 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="h-[73px] px-6 border-b border-gray-800 flex items-center justify-between">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">Panel Central</h1>
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            className="md:hidden rounded-lg border border-gray-700 px-2 py-1 text-sm text-gray-300"
+          >
+            Cerrar
+          </button>
         </div>
         
         {/* Location Selector */}
@@ -57,10 +82,10 @@ function MainLayout() {
               const loc = locations.find(l => l.id === e.target.value);
               if(loc) {
                 setCurrentLocation(loc);
-                setCurrentView('dashboard');
+                handleNavigate('dashboard');
               } else {
                 setCurrentLocation(null);
-                setCurrentView('welcome');
+                handleNavigate('welcome');
               }
             }}
             className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none transition-colors mb-3"
@@ -71,7 +96,7 @@ function MainLayout() {
             ))}
           </select>
           <button 
-            onClick={() => setCurrentView('installations')} 
+            onClick={() => handleNavigate('installations')} 
             className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center transition-colors ${currentView === 'installations' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700 hover:text-white'}`}
           >
             <svg className="w-3.5 h-3.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
@@ -79,23 +104,23 @@ function MainLayout() {
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1 p-4">
+        <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
           {currentLocation && (
             <div className="mb-6 animate-fade-in">
-              <button onClick={() => { setOrderToEdit(null); setCurrentView('nuevo_pedido'); }} className={`w-full text-center px-4 py-3 mb-2 rounded-xl font-bold transition-all shadow-lg hover:scale-105 ${currentView === 'nuevo_pedido' && !orderToEdit ? 'bg-emerald-500 text-gray-950 shadow-emerald-500/30' : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'}`}>+ NUEVO PEDIDO</button>
-              <button onClick={() => setCurrentView('gestion_pedidos')} className={`w-full text-center px-4 py-2 mb-4 rounded-xl font-bold transition-all shadow-lg hover:scale-105 ${currentView === 'gestion_pedidos' || orderToEdit ? 'bg-purple-500 text-gray-950 shadow-purple-500/30' : 'bg-purple-600/20 text-purple-400 border border-purple-500/30'}`}>GESTIÓN DE PEDIDOS</button>
+              <button onClick={() => handleNavigate('nuevo_pedido', { resetOrder: true })} className={`w-full text-center px-4 py-3 mb-2 rounded-xl font-bold transition-all shadow-lg hover:scale-105 ${currentView === 'nuevo_pedido' && !orderToEdit ? 'bg-emerald-500 text-gray-950 shadow-emerald-500/30' : 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'}`}>+ NUEVO PEDIDO</button>
+              <button onClick={() => handleNavigate('gestion_pedidos')} className={`w-full text-center px-4 py-2 mb-4 rounded-xl font-bold transition-all shadow-lg hover:scale-105 ${currentView === 'gestion_pedidos' || orderToEdit ? 'bg-purple-500 text-gray-950 shadow-purple-500/30' : 'bg-purple-600/20 text-purple-400 border border-purple-500/30'}`}>GESTIÓN DE PEDIDOS</button>
               
-              <button onClick={() => setCurrentView('dashboard')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'dashboard' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Dashboard</button>
-              <button onClick={() => setCurrentView('cocina')} className={`w-full text-left px-4 py-2.5 rounded-lg font-bold transition-colors ${currentView === 'cocina' ? 'bg-orange-600/20 text-orange-400' : 'text-orange-500/60 hover:bg-gray-800 hover:text-orange-400'}`}>Pedidos en Cocina</button>
-              <button onClick={() => setCurrentView('caja')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'caja' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Flujo de Caja</button>
-              <button onClick={() => setCurrentView('products')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'products' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Productos</button>
-              <button onClick={() => setCurrentView('clients')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'clients' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Clientes</button>
-              <button onClick={() => setCurrentView('employees')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'employees' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Empleados</button>
-              <button onClick={() => setCurrentView('repartidores')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'repartidores' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Repartidores</button>
+              <button onClick={() => handleNavigate('dashboard')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'dashboard' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Dashboard</button>
+              <button onClick={() => handleNavigate('cocina')} className={`w-full text-left px-4 py-2.5 rounded-lg font-bold transition-colors ${currentView === 'cocina' ? 'bg-orange-600/20 text-orange-400' : 'text-orange-500/60 hover:bg-gray-800 hover:text-orange-400'}`}>Pedidos en Cocina</button>
+              <button onClick={() => handleNavigate('caja')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'caja' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Flujo de Caja</button>
+              <button onClick={() => handleNavigate('products')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'products' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Productos</button>
+              <button onClick={() => handleNavigate('clients')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'clients' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Clientes</button>
+              <button onClick={() => handleNavigate('employees')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'employees' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Empleados</button>
+              <button onClick={() => handleNavigate('repartidores')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'repartidores' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Repartidores</button>
               <div className="pt-4 mt-2 border-t border-gray-800">
                 <span className="px-4 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Sistema</span>
-                <button onClick={() => setCurrentView('usuarios')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'usuarios' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Usuarios</button>
-                <button onClick={() => setCurrentView('auditoria')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'auditoria' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Auditoría</button>
+                <button onClick={() => handleNavigate('usuarios')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'usuarios' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Usuarios</button>
+                <button onClick={() => handleNavigate('auditoria')} className={`w-full text-left px-4 py-2.5 rounded-lg font-medium transition-colors ${currentView === 'auditoria' ? 'bg-blue-600/20 text-blue-400' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>Auditoría</button>
               </div>
             </div>
           )}
@@ -107,10 +132,18 @@ function MainLayout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="min-w-0 flex-1 overflow-y-auto">
         {/* Header Content */}
-        <header className="h-[73px] bg-gray-900 border-b border-gray-800 px-4 lg:px-8 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-100">
+        <header className="min-h-[73px] bg-gray-900 border-b border-gray-800 px-4 lg:px-8 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-300"
+            >
+              Menú
+            </button>
+            <h2 className="text-base sm:text-xl font-semibold text-gray-100 truncate">
             {currentView === 'welcome' && 'Inicio'}
             {currentView === 'nuevo_pedido' && (orderToEdit ? `Editando Pedido #${orderToEdit.id}` : 'Tomar Nuevo Pedido')}
             {currentView === 'gestion_pedidos' && 'Gestión de Pedidos Activos'}
@@ -124,7 +157,8 @@ function MainLayout() {
             {currentView === 'repartidores' && 'Flota de Repartidores'}
             {currentView === 'usuarios' && 'Gestión de Usuarios'}
             {currentView === 'auditoria' && 'Registro de Auditoría'}
-          </h2>
+            </h2>
+          </div>
           <div className="flex items-center space-x-3 text-sm text-gray-400 transition-all duration-300">
             {isSyncing ? (
               <span className="flex items-center text-amber-400 font-medium tracking-wide"><span className="w-2 h-2 rounded-full bg-amber-400 mr-2 animate-ping"></span> Actualizando...</span>
@@ -134,7 +168,7 @@ function MainLayout() {
           </div>
         </header>
 
-        <div className="p-4 lg:p-8 h-[calc(100vh-73px)]">
+        <div className="p-4 lg:p-8 min-h-[calc(100vh-73px)]">
           {currentView === 'welcome' && <WelcomeHub />}
           {currentView === 'nuevo_pedido' && <NuevoPedido orderToEdit={orderToEdit} setOrderToEdit={setOrderToEdit} setCurrentView={setCurrentView} />}
           {currentView === 'gestion_pedidos' && <GestionPedidos setOrderToEdit={setOrderToEdit} setCurrentView={setCurrentView} />}

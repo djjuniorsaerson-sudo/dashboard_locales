@@ -113,13 +113,13 @@ export default function Dashboard({ setIsSyncing }) {
             <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-10"><svg className="w-16 h-16 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd"/></svg></div>
               <h3 className="text-gray-400 text-sm font-medium relative z-10 uppercase tracking-wider">Total Vendido (Turno)</h3>
-              <p className="text-4xl font-bold mt-2 text-white relative z-10">${metrics.ventas_turno.toLocaleString()}</p>
+              <p className="text-3xl sm:text-4xl font-bold mt-2 text-white relative z-10 break-all">${metrics.ventas_turno.toLocaleString()}</p>
             </div>
             
             <div className="bg-gray-800 p-6 rounded-2xl border border-orange-700/50 shadow-lg relative overflow-hidden ring-1 ring-orange-500/20">
               <div className="absolute top-0 right-0 p-4 opacity-10"><svg className="w-16 h-16 text-orange-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd"/></svg></div>
               <h3 className="text-orange-400 text-sm font-bold relative z-10 uppercase tracking-wider">Pedidos Activos en Cocina</h3>
-              <p className="text-4xl font-bold mt-2 text-white relative z-10">{metrics.pedidos_activos}</p>
+              <p className="text-3xl sm:text-4xl font-bold mt-2 text-white relative z-10">{metrics.pedidos_activos}</p>
               {metrics.pedidos_activos > 0 && (
                 <div className="absolute bottom-4 right-4 flex items-center">
                     <span className="w-3 h-3 rounded-full bg-orange-500 mr-2 animate-ping"></span>
@@ -131,7 +131,7 @@ export default function Dashboard({ setIsSyncing }) {
             <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-10"><svg className="w-16 h-16 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg></div>
               <h3 className="text-gray-400 text-sm font-medium relative z-10 uppercase tracking-wider">Pedidos Entregados</h3>
-              <p className="text-4xl font-bold mt-2 text-emerald-400 relative z-10">{metrics.pedidos_finalizados}</p>
+              <p className="text-3xl sm:text-4xl font-bold mt-2 text-emerald-400 relative z-10">{metrics.pedidos_finalizados}</p>
             </div>
           </div>
 
@@ -152,7 +152,7 @@ export default function Dashboard({ setIsSyncing }) {
               </div>
               <div className="p-6 overflow-x-auto custom-scrollbar">
                 {metrics.product_sales && metrics.product_sales.length > 0 ? (
-                  <div className="flex space-x-5 pb-4">
+                  <div className="flex gap-4 pb-4">
                     {metrics.product_sales.map((item, idx) => (
                       <motion.div 
                         initial={{ opacity: 0, x: -20 }}
@@ -160,7 +160,7 @@ export default function Dashboard({ setIsSyncing }) {
                         transition={{ delay: idx * 0.05 }}
                         whileHover={{ scale: 1.05, y: -4 }}
                         key={idx} 
-                        className="flex-shrink-0 flex flex-col p-4 bg-gray-800/40 backdrop-blur-md rounded-2xl border border-gray-700/50 hover:border-blue-500/50 shadow-lg hover:shadow-blue-500/10 transition-all group min-w-[140px]"
+                        className="flex-shrink-0 flex flex-col p-4 bg-gray-800/40 backdrop-blur-md rounded-2xl border border-gray-700/50 hover:border-blue-500/50 shadow-lg hover:shadow-blue-500/10 transition-all group min-w-[135px] sm:min-w-[140px]"
                       >
                         <span className="text-white font-bold mb-3 text-base whitespace-nowrap group-hover:text-blue-400 transition-colors" title={item.name}>{item.name}</span>
                         <div className="flex items-center justify-between gap-4 mt-auto">
@@ -201,7 +201,7 @@ export default function Dashboard({ setIsSyncing }) {
               </div>
               <div className="overflow-y-auto p-6 flex-1 custom-scrollbar">
                 {metrics.stock_levels && metrics.stock_levels.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
                     {metrics.stock_levels.map((item, idx) => {
                       const isLowStock = item.stock <= 5;
                       return (

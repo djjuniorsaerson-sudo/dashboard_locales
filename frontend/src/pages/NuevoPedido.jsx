@@ -283,7 +283,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   };
 
   return (
-    <div className="p-6 flex gap-6 h-[calc(100vh-100px)]">
+    <div className="flex flex-col xl:flex-row gap-4 xl:gap-6 min-h-[calc(100vh-120px)]">
       {/* Catálogo de Productos */}
       <div className="flex-1 flex flex-col bg-gray-900 rounded-2xl border border-gray-800/50 shadow-2xl overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-96 bg-blue-500/10 blur-[120px] pointer-events-none rounded-full"></div>
@@ -301,7 +301,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4"
           >
             {products.map((p) => (
               <motion.button 
@@ -323,7 +323,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       </div>
       
       {/* Panel Lateral del Pedido */}
-      <div className="w-[420px] flex flex-col bg-gray-900/90 backdrop-blur-xl rounded-2xl border border-gray-800/50 overflow-hidden shrink-0 shadow-2xl relative">
+      <div className="w-full xl:w-[420px] xl:max-w-[420px] flex flex-col bg-gray-900/90 backdrop-blur-xl rounded-2xl border border-gray-800/50 overflow-hidden shrink-0 shadow-2xl relative">
         <div className="p-5 border-b border-gray-800/80 bg-gray-900/50 backdrop-blur-xl z-10">
           <div className="flex items-center mb-4">
             <User className="w-5 h-5 text-emerald-400 mr-2" />
@@ -331,7 +331,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
           </div>
           
           <div className="space-y-3 relative z-10">
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1">
                 <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Teléfono</label>
                 <input 
@@ -364,7 +364,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
               />
             </div>
             
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
               <select value={orderType} onChange={(e) => setOrderType(e.target.value)} className="flex-1 bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-blue-500/50 transition-colors">
                 <option value="Delivery">Delivery</option>
                 <option value="Mostrador">Mostrador</option>
@@ -398,7 +398,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                     exit={{ opacity: 0, x: 20, scale: 0.9 }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                     key={item.customKey} 
-                    className="flex justify-between items-start bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-sm"
+                    className="flex flex-col sm:flex-row justify-between items-start gap-3 bg-gray-900 p-4 rounded-2xl border border-gray-800 shadow-sm"
                   >
                     <div className="flex-1">
                       <p className="font-bold text-gray-100 text-lg">{item.product_name}</p>
@@ -407,7 +407,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                       {item.guarniciones.length > 0 && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-orange-500"></span> {item.guarniciones.map(g=>`${g.qty > 1 ? g.qty+'x ' : ''}${g.name}`).join(', ')}</p>}
                       <p className="text-sm font-black text-emerald-400 mt-2">${item.price.toLocaleString()}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-3 ml-2">
+                    <div className="flex w-full sm:w-auto flex-row sm:flex-col items-center sm:items-end justify-between gap-3 sm:ml-2">
                       <div className="flex items-center gap-1 bg-gray-950 p-1 rounded-xl border border-gray-800">
                         <button onClick={() => updateQuantity(item.customKey, -1)} className="w-7 h-7 rounded-lg bg-gray-800 text-gray-300 flex items-center justify-center hover:bg-gray-700 transition-colors hover:text-white">-</button>
                         <span className="w-6 text-center font-bold text-sm">{item.quantity}</span>
@@ -492,7 +492,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                 {selectedProduct.toppings && selectedProduct.toppings.length > 0 && (
                   <div className="mb-8">
                     <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Toppings (Si/No)</h4>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {selectedProduct.toppings.map(t => {
                         const isSelected = productAddons.toppings.some(x => x.id === t.id);
                         return (

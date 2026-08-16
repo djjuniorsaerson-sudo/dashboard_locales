@@ -140,21 +140,21 @@ export default function Clientes() {
   };
 
   return (
-    <div className="p-6 relative">
-      <div className="flex justify-between items-center mb-6">
+    <div className="relative">
+      <div className="mb-6 flex flex-col xl:flex-row justify-between xl:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Directorio de Clientes</h2>
           <p className="text-gray-400 text-sm mt-1">Extraído en tiempo real desde Yummy POS</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <input
             type="text"
             placeholder="Buscar cliente..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-            className="bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 w-64 transition-colors"
+            className="bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 w-full sm:w-64 transition-colors"
           />
-          <div className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 font-semibold shadow-sm flex items-center">
+          <div className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 font-semibold shadow-sm flex items-center justify-center">
             Total: {filteredClients.length}
           </div>
           <button 
@@ -192,7 +192,7 @@ export default function Clientes() {
                         <td className="px-6 py-4 text-center">
                           <button 
                             onClick={() => openModal(c)}
-                            className="text-blue-400 hover:text-blue-300 font-medium mr-3 transition-colors"
+                            className="inline-block text-blue-400 hover:text-blue-300 font-medium mr-3 transition-colors"
                           >
                             Editar
                           </button>

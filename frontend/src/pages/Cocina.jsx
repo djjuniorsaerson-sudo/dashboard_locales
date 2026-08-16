@@ -158,7 +158,7 @@ export default function Cocina() {
 
   return (
     <div className="flex flex-col h-full space-y-6">
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+      <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-4">
         <div className="flex items-center gap-4">
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">Pedidos en Cocina (KDS)</h2>
@@ -173,22 +173,22 @@ export default function Cocina() {
             Actualizar
           </button>
         </div>
-        <div className="flex bg-gray-800 rounded-lg p-1 border border-gray-700 w-max shadow-inner">
+        <div className="flex flex-wrap bg-gray-800 rounded-lg p-1 border border-gray-700 w-full xl:w-max shadow-inner">
           <button 
             onClick={() => setActiveTab('kitchen1')} 
-            className={`px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${activeTab === 'kitchen1' ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/30' : 'text-gray-400 hover:text-white'}`}
+            className={`flex-1 xl:flex-none px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${activeTab === 'kitchen1' ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/30' : 'text-gray-400 hover:text-white'}`}
           >
             {config?.kitchen1_name || 'Cocina 1'} ({kitchen1Orders.length})
           </button>
           <button 
             onClick={() => setActiveTab('kitchen2')} 
-            className={`px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${activeTab === 'kitchen2' ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/30' : 'text-gray-400 hover:text-white'}`}
+            className={`flex-1 xl:flex-none px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${activeTab === 'kitchen2' ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/30' : 'text-gray-400 hover:text-white'}`}
           >
             {config?.kitchen2_name || 'Cocina 2'} ({kitchen2Orders.length})
           </button>
           <button 
             onClick={() => setActiveTab('listos')} 
-            className={`px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${activeTab === 'listos' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/30' : 'text-gray-400 hover:text-white'}`}
+            className={`flex-1 xl:flex-none px-4 py-2 text-sm font-bold rounded-md transition-all duration-300 ${activeTab === 'listos' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/30' : 'text-gray-400 hover:text-white'}`}
           >
             Salida / Listos ({readyOrders.length})
           </button>
@@ -215,7 +215,7 @@ export default function Cocina() {
             </div>
           </motion.div>
         ) : (
-          <motion.div layout className="flex flex-wrap gap-6 items-start content-start">
+          <motion.div layout className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 sm:gap-6 items-start content-start">
             <AnimatePresence>
               {displayOrders.map(order => {
                 const ticket = activeTab === 'kitchen1' ? order.kitchen_tickets?.kitchen1 : 
@@ -252,7 +252,7 @@ export default function Cocina() {
                     exit={{ opacity: 0, scale: 0.8, filter: "blur(10px)" }}
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
                     key={order.id} 
-                    className={`w-80 max-w-sm flex flex-col bg-gray-900 backdrop-blur-md rounded-2xl border ${borderGlow} overflow-hidden h-max transition-colors`}
+                    className={`w-full flex flex-col bg-gray-900 backdrop-blur-md rounded-2xl border ${borderGlow} overflow-hidden h-max transition-colors`}
                   >
                     {/* Card Header */}
                     <div className={`p-4 ${headerBg} border-b border-gray-800 flex justify-between items-center`}>

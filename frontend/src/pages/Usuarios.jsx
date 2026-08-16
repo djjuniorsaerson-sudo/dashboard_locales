@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 
-export default function Usuarios({ token }) {
+import { useAuth } from '../context/AuthContext';
+
+export default function Usuarios() {
+  const { token } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -112,7 +115,7 @@ export default function Usuarios({ token }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center">
             <svg className="w-6 h-6 mr-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
@@ -122,7 +125,7 @@ export default function Usuarios({ token }) {
         </div>
         <button 
           onClick={() => setShowCreateModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors"
+          className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
         >
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
           Nuevo Usuario
@@ -163,7 +166,7 @@ export default function Usuarios({ token }) {
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-col sm:flex-row justify-end gap-2">
                       <button 
                         onClick={() => { setSelectedUser(u); setShowPasswordModal(true); }}
                         className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs transition-colors"
