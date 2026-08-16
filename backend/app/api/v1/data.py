@@ -326,6 +326,8 @@ def get_caja_report(
             client = YummyIntegrationClient(install.base_url, install.api_key)
             remote = deps.RemoteSession(client)
             report = ModulesExtractor.get_caja_report(remote)
+            if isinstance(report, list) and len(report) == 0:
+                client.check_health()
             if not isinstance(report, list):
                 raise RuntimeError("Remote cash report unavailable")
             save_installation_snapshot(
