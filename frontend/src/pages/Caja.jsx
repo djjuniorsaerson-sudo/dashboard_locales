@@ -19,6 +19,7 @@ export default function Caja() {
     shift_name: 'manana'
   });
   const [submitting, setSubmitting] = useState(false);
+  const isOffline = !!currentLocation && currentLocation.status !== 'ONLINE';
 
   const buildCashClosureHtml = (summary) => {
     const formatMoney = (amount) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(Number(amount || 0));
@@ -123,7 +124,8 @@ export default function Caja() {
 
   const fetchCaja = async () => {
     try {
-      const res = await fetch(`/api/v1/data/caja/report`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/caja/report${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -142,7 +144,8 @@ export default function Caja() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch(`/api/v1/data/employees`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/employees${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -157,13 +160,17 @@ export default function Caja() {
   useEffect(() => {
     fetchCaja();
     fetchEmployees();
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const toggleDay = (date) => {
     setExpandedDays(prev => ({ ...prev, [date]: !prev[date] }));
   };
 
   const handleOpenModal = (type) => {
+    if (isOffline) {
+      alert('El local está OFFLINE. Podés ver el último cierre sincronizado, pero no registrar movimientos en tiempo real.');
+      return;
+    }
     setModalType(type);
     setFormData({
       amount: type === 'reset_turno' ? 0 : '',
@@ -192,7 +199,7 @@ export default function Caja() {
       const isCashClose = modalType === 'reset_turno';
       const endpoint = isCashClose
         ? `/api/v1/data/caja/reset-turno?installation_id=${encodeURIComponent(currentLocation?.id || '')}`
-        : `/api/v1/data/caja/movimiento`;
+        : `/api/v1/data/caja/movimiento?installation_id=${encodeURIComponent(currentLocation?.id || '')}`;
 
       const payload = isCashClose
         ? {
@@ -288,20 +295,38 @@ export default function Caja() {
           <p className="text-gray-400 text-sm mt-1">Control integral de ingresos, salidas y turnos</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => handleOpenModal('saldo_inicial')} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors">
+          <button
+            onClick={() => handleOpenModal('saldo_inicial')}
+            disabled={isOffline}
+            className={`text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors ${isOffline ? 'bg-green-900/40 cursor-not-allowed opacity-60' : 'bg-green-600 hover:bg-green-700'}`}
+          >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
             Iniciar Caja
           </button>
-          <button onClick={() => handleOpenModal('retiro')} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors">
+          <button
+            onClick={() => handleOpenModal('retiro')}
+            disabled={isOffline}
+            className={`text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors ${isOffline ? 'bg-orange-900/40 cursor-not-allowed opacity-60' : 'bg-orange-500 hover:bg-orange-600'}`}
+          >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4"></path></svg>
             Retiro
           </button>
-          <button onClick={() => handleOpenModal('reset_turno')} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors">
+          <button
+            onClick={() => handleOpenModal('reset_turno')}
+            disabled={isOffline}
+            className={`text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors ${isOffline ? 'bg-red-900/40 cursor-not-allowed opacity-60' : 'bg-red-600 hover:bg-red-700'}`}
+          >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
             Cerrar Caja
           </button>
         </div>
       </div>
+
+      {isOffline && (
+        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          Mostrando el último estado sincronizado de caja. Las acciones en tiempo real quedan deshabilitadas hasta que el local vuelva a estar ONLINE.
+        </div>
+      )}
 
       <div className="space-y-4">
         {loading ? (

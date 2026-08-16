@@ -69,6 +69,7 @@ class CashShiftCloseData(BaseModel):
 
 
 EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
+CASHBOX_SNAPSHOT_KEY = "cashbox_report_snapshot_v1"
 
 
 def get_installation_for_user(
@@ -311,8 +312,34 @@ def get_repartidores(db: Session = Depends(deps.get_yummy_db)):
     return ModulesExtractor.get_repartidores(db)
 
 @router.get("/caja/report")
-def get_caja_report(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_caja_report(db)
+def get_caja_report(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        return []
+
+    if install.connection_status == "ONLINE":
+        try:
+            client = YummyIntegrationClient(install.base_url, install.api_key)
+            remote = deps.RemoteSession(client)
+            report = ModulesExtractor.get_caja_report(remote)
+            if not isinstance(report, list):
+                raise RuntimeError("Remote cash report unavailable")
+            save_installation_snapshot(
+                db,
+                install.id,
+                CASHBOX_SNAPSHOT_KEY,
+                {"report": report},
+            )
+            return report
+        except Exception:
+            pass
+
+    snapshot = load_installation_snapshot(db, install.id, CASHBOX_SNAPSHOT_KEY) or {}
+    return snapshot.get("report", [])
 
 @router.get("/client/{phone}")
 def get_client_by_phone(phone: str, db: Session = Depends(deps.get_yummy_db)):
@@ -518,10 +545,14 @@ async def cancel_pedido(order_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/caja/movimiento")
-def add_caja_movimiento(data: CajaMovimientoData):
+def add_caja_movimiento(
+    data: CajaMovimientoData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
     try:
-        client = get_integration_client()
-        if not client: return {}
+        client = get_integration_client_for_installation(db, current_user, installation_id)
         return client.request("POST", "/api/caja/movimientos", payload=data.dict(exclude_none=True))
     except Exception as e:
         from fastapi import HTTPException
