@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 
-export default function Auditoria({ token }) {
+export default function Auditoria() {
+  const { token, currentLocation } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [moduleFilter, setModuleFilter] = useState('');
+  const isOffline = !!currentLocation && currentLocation.status !== 'ONLINE';
 
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/data/audit-logs`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/audit-logs${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -25,7 +29,7 @@ export default function Auditoria({ token }) {
 
   useEffect(() => {
     fetchLogs();
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const uniqueModules = [...new Set(logs.map(l => l.module_name).filter(Boolean))];
 
@@ -85,6 +89,11 @@ export default function Auditoria({ token }) {
       </div>
 
       <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
+        {isOffline && (
+          <div className="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            Mostrando el último registro de auditoría sincronizado. El local está OFFLINE.
+          </div>
+        )}
         
         {/* Filters */}
         <div className="p-4 border-b border-gray-700 bg-gray-850 flex gap-4">

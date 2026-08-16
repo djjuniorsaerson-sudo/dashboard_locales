@@ -71,6 +71,7 @@ class CashShiftCloseData(BaseModel):
 EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
 CASHBOX_SNAPSHOT_KEY = "cashbox_report_snapshot_v1"
 ACTIVE_ORDERS_SNAPSHOT_KEY = "active_orders_snapshot_v1"
+AUDIT_LOGS_SNAPSHOT_KEY = "audit_logs_snapshot_v1"
 
 
 def get_installation_for_user(
@@ -652,5 +653,33 @@ def toggle_usuario_status(user_id: int, data: dict, db: Session = Depends(deps.g
     return ModulesExtractor.toggle_usuario_status(db, user_id, bool(active))
 
 @router.get("/audit-logs")
-def get_audit_logs(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_audit_logs(db)
+def get_audit_logs(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        return []
+
+    if install.connection_status == "ONLINE":
+        try:
+            client = YummyIntegrationClient(install.base_url, install.api_key)
+            remote = deps.RemoteSession(client)
+            logs = ModulesExtractor.get_audit_logs(remote)
+            if isinstance(logs, list) and len(logs) == 0:
+                client.check_health()
+            if not isinstance(logs, list):
+                raise RuntimeError("Remote audit logs unavailable")
+            save_installation_snapshot(
+                db,
+                install.id,
+                AUDIT_LOGS_SNAPSHOT_KEY,
+                {"logs": logs},
+            )
+            return logs
+        except Exception:
+            pass
+
+    snapshot = load_installation_snapshot(db, install.id, AUDIT_LOGS_SNAPSHOT_KEY) or {}
+    return snapshot.get("logs", [])
