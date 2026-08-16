@@ -28,7 +28,8 @@ export default function Empleados() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch(`/api/v1/data/employees`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/employees${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -44,7 +45,8 @@ export default function Empleados() {
 
   const fetchNovedades = async () => {
     try {
-      const res = await fetch(`/api/v1/data/employees/novedades`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/employees/novedades${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -59,7 +61,7 @@ export default function Empleados() {
   useEffect(() => {
     fetchEmployees();
     fetchNovedades();
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const handleOpenModal = (employee, type) => {
     setSelectedEmployee(employee);

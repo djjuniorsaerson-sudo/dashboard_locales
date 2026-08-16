@@ -1,10 +1,12 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.services.extractor_modules import ModulesExtractor
+from app.services.yummy_client import YummyIntegrationClient
 from app.models.user import User
-from app.models.yummy import YummyInstallation
+from app.models.yummy import YummyInstallation, YummySnapshot
 import requests
 
 router = APIRouter()
@@ -64,6 +66,64 @@ class CashShiftCloseData(BaseModel):
     shift: str = "general"
     movement_date: Optional[str] = None
     generate_report: bool = True
+
+
+EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
+
+
+def get_installation_for_user(
+    db: Session,
+    current_user: User,
+    installation_id: Optional[str] = None,
+    online_only: bool = False,
+):
+    query = db.query(YummyInstallation).filter(
+        YummyInstallation.organization_id == current_user.organization_id,
+    )
+    if installation_id:
+        query = query.filter(YummyInstallation.id == installation_id)
+    if online_only:
+        query = query.filter(YummyInstallation.connection_status == "ONLINE")
+        return query.order_by(YummyInstallation.last_health_check.desc()).first()
+    return query.order_by(YummyInstallation.last_health_check.desc().nullslast(), YummyInstallation.created_at.desc()).first()
+
+
+def save_installation_snapshot(
+    db: Session,
+    installation_id,
+    snapshot_key: str,
+    payload: dict,
+):
+    db.add(
+        YummySnapshot(
+            installation_id=installation_id,
+            snapshot_data={
+                "snapshot_key": snapshot_key,
+                "payload": payload,
+                "saved_at": datetime.utcnow().isoformat(),
+            },
+            status="SUCCESS",
+        )
+    )
+    db.commit()
+
+
+def load_installation_snapshot(
+    db: Session,
+    installation_id,
+    snapshot_key: str,
+):
+    row = (
+        db.query(YummySnapshot)
+        .filter(YummySnapshot.installation_id == installation_id)
+        .order_by(YummySnapshot.created_at.desc())
+        .all()
+    )
+    for snapshot in row:
+        data = snapshot.snapshot_data or {}
+        if data.get("snapshot_key") == snapshot_key:
+            return data.get("payload") or {}
+    return None
 
 
 def get_integration_client_for_installation(
@@ -128,12 +188,62 @@ def delete_client(client_id: int, db: Session = Depends(deps.get_yummy_db)):
     return ModulesExtractor.delete_client(db, client_id)
 
 @router.get("/employees")
-def get_employees(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_employees(db)
+def get_employees(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        return []
+
+    if install.connection_status == "ONLINE":
+        try:
+            client = YummyIntegrationClient(install.base_url, install.api_key)
+            remote = deps.RemoteSession(client)
+            employees = ModulesExtractor.get_employees(remote)
+            novedades = ModulesExtractor.get_empleado_novedades(remote)
+            save_installation_snapshot(
+                db,
+                install.id,
+                EMPLOYEES_SNAPSHOT_KEY,
+                {"employees": employees, "novedades": novedades},
+            )
+            return employees
+        except Exception:
+            pass
+
+    snapshot = load_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY) or {}
+    return snapshot.get("employees", [])
 
 @router.get("/employees/novedades")
-def get_empleado_novedades(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_empleado_novedades(db)
+def get_empleado_novedades(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        return []
+
+    if install.connection_status == "ONLINE":
+        try:
+            client = YummyIntegrationClient(install.base_url, install.api_key)
+            remote = deps.RemoteSession(client)
+            employees = ModulesExtractor.get_employees(remote)
+            novedades = ModulesExtractor.get_empleado_novedades(remote)
+            save_installation_snapshot(
+                db,
+                install.id,
+                EMPLOYEES_SNAPSHOT_KEY,
+                {"employees": employees, "novedades": novedades},
+            )
+            return novedades
+        except Exception:
+            pass
+
+    snapshot = load_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY) or {}
+    return snapshot.get("novedades", [])
 
 @router.post("/employees/{employee_id}/novedad")
 def add_empleado_novedad(employee_id: int, data: NovedadData):
