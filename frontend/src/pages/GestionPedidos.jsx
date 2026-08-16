@@ -8,11 +8,13 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const isOffline = !!currentLocation && currentLocation.status !== 'ONLINE';
 
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/data/cocina/pedidos`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/cocina/pedidos${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -33,21 +35,29 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
 
   useEffect(() => {
     fetchOrders();
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const handleEdit = (order) => {
+    if (isOffline) {
+      alert('El local está OFFLINE. Podés ver el último estado sincronizado, pero no editar pedidos hasta que vuelva a estar ONLINE.');
+      return;
+    }
     setOrderToEdit(order);
     setCurrentView('nuevo_pedido');
   };
 
   const handleCancel = async (orderId) => {
+    if (isOffline) {
+      alert('El local está OFFLINE. Podés ver el último estado sincronizado, pero no anular pedidos hasta que vuelva a estar ONLINE.');
+      return;
+    }
     if (!window.confirm(`¿Estás seguro de que quieres anular el pedido #${orderId}?`)) return;
     
     // Optimistic UI update
     setOrders(orders.filter(o => o.id !== orderId));
 
     try {
-      const res = await fetch(`/api/v1/data/pedidos/${orderId}/cancel`, {
+      const res = await fetch(`/api/v1/data/pedidos/${orderId}/cancel?installation_id=${encodeURIComponent(currentLocation?.id || '')}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -90,6 +100,12 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
           />
         </div>
       </div>
+
+      {isOffline && (
+        <div className="mx-6 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          Mostrando el último estado sincronizado de pedidos. Las acciones en tiempo real quedan deshabilitadas hasta que el local vuelva a estar ONLINE.
+        </div>
+      )}
 
       {/* Orders List */}
       <div className="flex-1 overflow-y-auto p-6">
@@ -154,14 +170,16 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                   <div className="p-4 bg-gray-900/50 flex gap-3 border-t border-gray-800">
                     <button 
                       onClick={() => handleCancel(order.id)}
-                      className="flex-1 flex items-center justify-center px-4 py-2.5 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:text-red-300 rounded-xl font-medium transition-all"
+                      disabled={isOffline}
+                      className={`flex-1 flex items-center justify-center px-4 py-2.5 border rounded-xl font-medium transition-all ${isOffline ? 'bg-red-900/20 text-red-300/60 border-red-500/10 cursor-not-allowed opacity-60' : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 hover:text-red-300'}`}
                     >
                       <XCircle className="w-4 h-4 mr-2" />
                       Anular
                     </button>
                     <button 
                       onClick={() => handleEdit(order)}
-                      className="flex-1 flex items-center justify-center px-4 py-2.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300 rounded-xl font-medium transition-all"
+                      disabled={isOffline}
+                      className={`flex-1 flex items-center justify-center px-4 py-2.5 border rounded-xl font-medium transition-all ${isOffline ? 'bg-blue-900/20 text-blue-300/60 border-blue-500/10 cursor-not-allowed opacity-60' : 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300'}`}
                     >
                       <Edit className="w-4 h-4 mr-2" />
                       Editar

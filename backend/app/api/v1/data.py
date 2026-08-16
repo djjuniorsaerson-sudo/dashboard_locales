@@ -70,6 +70,7 @@ class CashShiftCloseData(BaseModel):
 
 EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
 CASHBOX_SNAPSHOT_KEY = "cashbox_report_snapshot_v1"
+ACTIVE_ORDERS_SNAPSHOT_KEY = "active_orders_snapshot_v1"
 
 
 def get_installation_for_user(
@@ -476,16 +477,34 @@ def dump_schema(db: Session = Depends(deps.get_yummy_db)):
         return {"error": str(e)}
 
 @router.get("/cocina/pedidos")
-def get_cocina_pedidos():
-    try:
-        client = get_integration_client()
-        if not client:
-            return []
-        parsed = client.request("GET", "/api/pedidos")
-        return parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
-    except Exception as e:
-        print("Error fetching pedidos:", e)
+def get_cocina_pedidos(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
         return []
+
+    if install.connection_status == "ONLINE":
+        try:
+            client = YummyIntegrationClient(install.base_url, install.api_key)
+            parsed = client.request("GET", "/api/pedidos")
+            orders = parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
+            if not isinstance(orders, list):
+                raise RuntimeError("Remote active orders unavailable")
+            save_installation_snapshot(
+                db,
+                install.id,
+                ACTIVE_ORDERS_SNAPSHOT_KEY,
+                {"orders": orders},
+            )
+            return orders
+        except Exception as e:
+            print("Error fetching pedidos:", e)
+
+    snapshot = load_installation_snapshot(db, install.id, ACTIVE_ORDERS_SNAPSHOT_KEY) or {}
+    return snapshot.get("orders", [])
 
 @router.get("/cocina/config")
 def get_cocina_config():
@@ -526,21 +545,30 @@ from app.api import deps
 from app.models.yummy import YummyInstallation
 
 @router.put("/pedidos/{order_id}")
-async def update_pedido(order_id: int, request: Request):
+async def update_pedido(
+    order_id: int,
+    request: Request,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
     try:
         data = await request.json()
-        client = get_integration_client()
-        if not client: return {}
+        client = get_integration_client_for_installation(db, current_user, installation_id)
         return client.request("PUT", f"/api/v1/data/pedidos/{order_id}", payload=data)
     except Exception as e:
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/pedidos/{order_id}/cancel")
-async def cancel_pedido(order_id: int):
+async def cancel_pedido(
+    order_id: int,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
     try:
-        client = get_integration_client()
-        if not client: return {}
+        client = get_integration_client_for_installation(db, current_user, installation_id)
         return client.request("POST", f"/api/v1/data/pedidos/{order_id}/cancel")
     except Exception as e:
         from fastapi import HTTPException
