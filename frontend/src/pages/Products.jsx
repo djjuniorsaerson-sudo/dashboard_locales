@@ -55,8 +55,8 @@ export default function Products() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-5">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="col-span-2 xl:col-span-1 bg-gray-800 rounded-xl border border-gray-700 p-5">
           <div className="text-gray-400 text-sm">Local activo</div>
           <div className="text-white font-bold mt-1">{currentLocation?.name || 'Sin local seleccionado'}</div>
         </div>
