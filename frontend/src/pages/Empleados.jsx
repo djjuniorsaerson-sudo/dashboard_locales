@@ -198,8 +198,8 @@ export default function Empleados() {
   }, 0);
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-6">
+      <div className="mb-6">
         <div>
           <h2 className="text-2xl font-bold text-white">Nómina de Empleados</h2>
           <p className="text-gray-400 text-sm mt-1">Gestión de personal extraída desde Yummy POS</p>
@@ -210,78 +210,147 @@ export default function Empleados() {
         {loading ? (
            <div className="p-8 text-center text-gray-500">Cargando datos...</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-gray-400">
-              <thead className="bg-gray-900 text-gray-300 uppercase font-semibold border-b border-gray-700">
-                <tr>
-                  <th className="px-6 py-4">ID</th>
-                  <th className="px-6 py-4">Nombre Completo</th>
-                  <th className="px-6 py-4">Rol</th>
-                  <th className="px-6 py-4 text-right">Sueldo Base</th>
-                  <th className="px-6 py-4 text-right">Descuentos</th>
-                  <th className="px-6 py-4 text-right">Sueldo Final</th>
-                  <th className="px-6 py-4 text-center">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {employees.map((e) => (
-                  <tr key={e.id} className="border-b border-gray-750 hover:bg-gray-700 transition-colors">
-                    <td className="px-6 py-4 font-mono text-gray-500">#{e.id}</td>
-                    <td className="px-6 py-4 font-medium text-white">{e.name}</td>
-                    <td className="px-6 py-4">{e.role || 'Staff'}</td>
-                    <td className="px-6 py-4 text-right text-gray-300">${(e.salary_base || 0).toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right text-red-400 font-medium">-${(e.adelantos || 0).toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right text-emerald-400 font-bold">${(e.final_salary || 0).toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center space-x-2">
-                      <button 
-                        onClick={() => handleOpenModal(e, 'adelanto')}
-                        className="text-xs bg-blue-600/20 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded hover:bg-blue-600/40 transition-colors"
-                      >
-                        + Adelanto
-                      </button>
-                      <button 
-                        onClick={() => handleOpenModal(e, 'falta')}
-                        className="text-xs bg-orange-600/20 text-orange-400 border border-orange-500/30 px-3 py-1.5 rounded hover:bg-orange-600/40 transition-colors"
-                      >
-                        + Falta
-                      </button>
-                      <button
-                        onClick={() => openEditModal(e)}
-                        className="text-xs bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded hover:bg-emerald-600/40 transition-colors"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => handleResetEmployee(e)}
-                        disabled={isSaving}
-                        className="text-xs bg-red-600/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-600/40 transition-colors disabled:opacity-50"
-                      >
-                        Reiniciar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {employees.length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="px-6 py-8 text-center text-gray-500">No hay empleados registrados en Yummy POS.</td>
-                  </tr>
-                )}
-              </tbody>
-              {employees.length > 0 && (
-                <tfoot className="bg-gray-900/80 border-t border-gray-600">
-                  <tr>
-                    <td colSpan="5" className="px-6 py-5 text-right font-bold text-white uppercase tracking-wider text-sm">
-                      Total Sueldos a Pagar <span className="text-gray-500 text-xs normal-case ml-2">(Ignorando negativos)</span>
-                    </td>
-                    <td className="px-6 py-5 text-right text-emerald-400 font-black text-xl">
-                      ${totalAPagar.toLocaleString()}
-                    </td>
-                    <td></td>
-                  </tr>
-                </tfoot>
+          <>
+            <div className="divide-y divide-gray-700 md:hidden">
+              {employees.map((e) => (
+                <div key={e.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-mono text-gray-500">#{e.id}</div>
+                      <div className="font-semibold text-white break-words mt-1">{e.name}</div>
+                      <div className="text-sm text-gray-400 mt-1">{e.role || 'Staff'}</div>
+                    </div>
+                    <div className="shrink-0 rounded-lg bg-emerald-500/10 px-3 py-2 text-right">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-500">Final</div>
+                      <div className="text-emerald-400 font-bold">${(e.final_salary || 0).toLocaleString()}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-gray-900/60 rounded-lg p-3">
+                      <div className="text-gray-500 text-xs uppercase tracking-wide">Sueldo base</div>
+                      <div className="text-white font-semibold mt-1">${(e.salary_base || 0).toLocaleString()}</div>
+                    </div>
+                    <div className="bg-gray-900/60 rounded-lg p-3">
+                      <div className="text-gray-500 text-xs uppercase tracking-wide">Descuentos</div>
+                      <div className="text-red-400 font-semibold mt-1">-${(e.adelantos || 0).toLocaleString()}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => handleOpenModal(e, 'adelanto')}
+                      className="rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 px-3 py-2 text-sm font-medium"
+                    >
+                      + Adelanto
+                    </button>
+                    <button 
+                      onClick={() => handleOpenModal(e, 'falta')}
+                      className="rounded-lg bg-orange-600/20 text-orange-400 border border-orange-500/30 px-3 py-2 text-sm font-medium"
+                    >
+                      + Falta
+                    </button>
+                    <button
+                      onClick={() => openEditModal(e)}
+                      className="rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 px-3 py-2 text-sm font-medium"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => handleResetEmployee(e)}
+                      disabled={isSaving}
+                      className="rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 px-3 py-2 text-sm font-medium disabled:opacity-50"
+                    >
+                      Reiniciar
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {employees.length === 0 && (
+                <div className="px-6 py-8 text-center text-gray-500">No hay empleados registrados en Yummy POS.</div>
               )}
-            </table>
-          </div>
+              {employees.length > 0 && (
+                <div className="p-4 bg-gray-900/80 border-t border-gray-600">
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">Total sueldos a pagar</div>
+                  <div className="text-[11px] text-gray-500 mt-1">(Ignorando negativos)</div>
+                  <div className="text-emerald-400 font-black text-2xl mt-2">${totalAPagar.toLocaleString()}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-sm text-gray-400">
+                <thead className="bg-gray-900 text-gray-300 uppercase font-semibold border-b border-gray-700">
+                  <tr>
+                    <th className="px-6 py-4">ID</th>
+                    <th className="px-6 py-4">Nombre Completo</th>
+                    <th className="px-6 py-4">Rol</th>
+                    <th className="px-6 py-4 text-right">Sueldo Base</th>
+                    <th className="px-6 py-4 text-right">Descuentos</th>
+                    <th className="px-6 py-4 text-right">Sueldo Final</th>
+                    <th className="px-6 py-4 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((e) => (
+                    <tr key={e.id} className="border-b border-gray-750 hover:bg-gray-700 transition-colors">
+                      <td className="px-6 py-4 font-mono text-gray-500">#{e.id}</td>
+                      <td className="px-6 py-4 font-medium text-white">{e.name}</td>
+                      <td className="px-6 py-4">{e.role || 'Staff'}</td>
+                      <td className="px-6 py-4 text-right text-gray-300">${(e.salary_base || 0).toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right text-red-400 font-medium">-${(e.adelantos || 0).toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right text-emerald-400 font-bold">${(e.final_salary || 0).toLocaleString()}</td>
+                      <td className="px-6 py-4 text-center space-x-2">
+                        <button 
+                          onClick={() => handleOpenModal(e, 'adelanto')}
+                          className="text-xs bg-blue-600/20 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded hover:bg-blue-600/40 transition-colors"
+                        >
+                          + Adelanto
+                        </button>
+                        <button 
+                          onClick={() => handleOpenModal(e, 'falta')}
+                          className="text-xs bg-orange-600/20 text-orange-400 border border-orange-500/30 px-3 py-1.5 rounded hover:bg-orange-600/40 transition-colors"
+                        >
+                          + Falta
+                        </button>
+                        <button
+                          onClick={() => openEditModal(e)}
+                          className="text-xs bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded hover:bg-emerald-600/40 transition-colors"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleResetEmployee(e)}
+                          disabled={isSaving}
+                          className="text-xs bg-red-600/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-600/40 transition-colors disabled:opacity-50"
+                        >
+                          Reiniciar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {employees.length === 0 && (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-8 text-center text-gray-500">No hay empleados registrados en Yummy POS.</td>
+                    </tr>
+                  )}
+                </tbody>
+                {employees.length > 0 && (
+                  <tfoot className="bg-gray-900/80 border-t border-gray-600">
+                    <tr>
+                      <td colSpan="5" className="px-6 py-5 text-right font-bold text-white uppercase tracking-wider text-sm">
+                        Total Sueldos a Pagar <span className="text-gray-500 text-xs normal-case ml-2">(Ignorando negativos)</span>
+                      </td>
+                      <td className="px-6 py-5 text-right text-emerald-400 font-black text-xl">
+                        ${totalAPagar.toLocaleString()}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -291,7 +360,7 @@ export default function Empleados() {
         </div>
         <div className="p-4 overflow-y-auto flex-1 space-y-3 bg-gray-800">
           {novedades.map((nov) => (
-            <div key={nov.id} className="bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-700 flex justify-between items-start hover:bg-gray-800 transition-colors">
+            <div key={nov.id} className="bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-700 hover:bg-gray-800 transition-colors">
                 <div>
                     <div className="flex items-center gap-2 mb-2">
                         <div className="font-bold text-white text-sm">{nov.employee_name}</div>
