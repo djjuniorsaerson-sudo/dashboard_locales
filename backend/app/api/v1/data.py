@@ -1,4 +1,5 @@
 from datetime import datetime
+from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -8,6 +9,8 @@ from app.services.yummy_client import YummyIntegrationClient
 from app.models.user import User
 from app.models.yummy import YummyInstallation, YummySnapshot
 import requests
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font
 
 router = APIRouter()
 
@@ -72,6 +75,55 @@ EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
 CASHBOX_SNAPSHOT_KEY = "cashbox_report_snapshot_v1"
 ACTIVE_ORDERS_SNAPSHOT_KEY = "active_orders_snapshot_v1"
 AUDIT_LOGS_SNAPSHOT_KEY = "audit_logs_snapshot_v1"
+
+
+def _fetch_active_orders_for_installation(db: Session, current_user: User, installation_id: Optional[str] = None):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        return []
+
+    if install.connection_status == "ONLINE":
+        try:
+            client = YummyIntegrationClient(install.base_url, install.api_key)
+            parsed = client.request("GET", "/api/pedidos")
+            orders = parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
+            if not isinstance(orders, list):
+                raise RuntimeError("Remote active orders unavailable")
+            save_installation_snapshot(
+                db,
+                install.id,
+                ACTIVE_ORDERS_SNAPSHOT_KEY,
+                {"orders": orders},
+            )
+            return orders
+        except Exception as e:
+            print("Error fetching pedidos:", e)
+
+    snapshot = load_installation_snapshot(db, install.id, ACTIVE_ORDERS_SNAPSHOT_KEY) or {}
+    return snapshot.get("orders", [])
+
+
+def _format_order_item_detail(item: dict) -> str:
+    quantity = item.get("quantity", 1) or 1
+    name = str(item.get("product_name") or item.get("name") or "Producto").strip()
+    parts = [f"{quantity}x {name}"]
+
+    for entry in item.get("guarniciones", []) or []:
+        entry_name = str(entry.get("name", "")).strip()
+        if entry_name:
+            parts.append(f"  - {entry.get('quantity', 1) or 1}x {entry_name}")
+
+    for entry in item.get("extras", []) or []:
+        entry_name = str(entry.get("name", "")).strip()
+        if entry_name:
+            parts.append(f"  + {entry.get('quantity', 1) or 1}x {entry_name}")
+
+    for entry in item.get("toppings", []) or []:
+        entry_name = str(entry.get("name", "")).strip()
+        if entry_name:
+            parts.append(f"  + {entry_name}")
+
+    return "\n".join(parts)
 
 
 def get_installation_for_user(
@@ -483,29 +535,81 @@ def get_cocina_pedidos(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
-    if not install:
-        return []
+    return _fetch_active_orders_for_installation(db, current_user, installation_id)
 
-    if install.connection_status == "ONLINE":
-        try:
-            client = YummyIntegrationClient(install.base_url, install.api_key)
-            parsed = client.request("GET", "/api/pedidos")
-            orders = parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
-            if not isinstance(orders, list):
-                raise RuntimeError("Remote active orders unavailable")
-            save_installation_snapshot(
-                db,
-                install.id,
-                ACTIVE_ORDERS_SNAPSHOT_KEY,
-                {"orders": orders},
-            )
-            return orders
-        except Exception as e:
-            print("Error fetching pedidos:", e)
 
-    snapshot = load_installation_snapshot(db, install.id, ACTIVE_ORDERS_SNAPSHOT_KEY) or {}
-    return snapshot.get("orders", [])
+@router.get("/pedidos/export/xlsx")
+def export_pedidos_xlsx(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    orders = _fetch_active_orders_for_installation(db, current_user, installation_id)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Pedidos Activos"
+
+    headers = [
+        "Pedido",
+        "Estado",
+        "Cliente",
+        "Dirección",
+        "Tipo",
+        "Pago",
+        "Total",
+        "Creado",
+        "Detalle",
+        "Notas",
+    ]
+    sheet.append(headers)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+
+    for order in orders:
+        detail_lines = [_format_order_item_detail(item) for item in (order.get("items", []) or [])]
+        sheet.append([
+            order.get("id"),
+            order.get("state") or order.get("status") or "",
+            str(order.get("client_name") or order.get("customer_name") or "").strip(),
+            str(order.get("customer_address") or order.get("address") or "").strip(),
+            str(order.get("order_type") or "").strip(),
+            str(order.get("payment_method") or "").strip(),
+            float(order.get("total") or 0),
+            str(order.get("created_at") or order.get("order_time") or "").strip(),
+            "\n".join(detail_lines),
+            str(order.get("notes") or "").strip(),
+        ])
+
+    widths = {
+        "A": 12,
+        "B": 16,
+        "C": 26,
+        "D": 34,
+        "E": 14,
+        "F": 16,
+        "G": 14,
+        "H": 22,
+        "I": 70,
+        "J": 32,
+    }
+    for column, width in widths.items():
+        sheet.column_dimensions[column].width = width
+
+    for row in sheet.iter_rows(min_row=2):
+        sheet.row_dimensions[row[0].row].height = 36
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    filename = f"pedidos_activos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 @router.get("/cocina/config")
 def get_cocina_config():

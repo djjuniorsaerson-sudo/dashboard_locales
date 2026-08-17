@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Edit, XCircle, Search, Clock, CreditCard, User } from 'lucide-react';
+import { Edit, XCircle, Search, CreditCard, User, Download } from 'lucide-react';
 
 export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
   const { token, currentLocation } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
   const isOffline = !!currentLocation && currentLocation.status !== 'ONLINE';
 
   const fetchOrders = async () => {
@@ -76,6 +77,40 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
     }
   };
 
+  const exportOrders = async () => {
+    if (!currentLocation?.id) {
+      alert('No hay un local activo seleccionado.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/v1/data/pedidos/export/xlsx?installation_id=${encodeURIComponent(currentLocation.id)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || 'No se pudo descargar el Excel');
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      const filename = match?.[1] || `pedidos_activos_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting pedidos', error);
+      alert(error.message || 'No se pudo descargar el Excel');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const filteredOrders = Array.isArray(orders) ? orders.filter(o => 
     (o.id && o.id.toString().includes(search)) || 
     (o.client_name && o.client_name.toLowerCase().includes(search.toLowerCase()))
@@ -86,26 +121,39 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
   const getClientName = (order) =>
     String(order?.client_name || order?.customer_name || '').trim() || 'Cliente Mostrador';
 
+  const getAddress = (order) =>
+    String(order?.customer_address || order?.address || '').trim();
+
   const getItemName = (item) =>
     String(item?.product_name || item?.name || '').trim() || 'Producto';
 
   return (
     <div className="flex flex-col h-full bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden shadow-2xl">
       {/* Header & Search */}
-      <div className="p-6 border-b border-gray-800 bg-gray-800/50 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div className="p-6 border-b border-gray-800 bg-gray-800/50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Pedidos Activos</h2>
           <p className="text-sm text-gray-400 mt-1">Gestiona, edita o cancela órdenes en curso.</p>
         </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="Buscar por ID o Cliente..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-gray-950 border border-gray-700 text-white rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all"
-          />
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+          <button
+            onClick={exportOrders}
+            disabled={exporting || !currentLocation?.id}
+            className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:text-emerald-300/60 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl font-bold transition-colors w-full sm:w-auto"
+          >
+            <Download className="w-4 h-4" />
+            {exporting ? 'Descargando...' : 'Descargar Excel'}
+          </button>
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Buscar por ID o Cliente..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-gray-950 border border-gray-700 text-white rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all"
+            />
+          </div>
         </div>
       </div>
 
@@ -153,6 +201,11 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                         <User className="w-4 h-4 mr-1.5" />
                         {getClientName(order)}
                       </div>
+                      {getAddress(order) && (
+                        <div className="text-gray-500 text-xs mt-1 break-words max-w-[240px]">
+                          {getAddress(order)}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className="text-xl font-bold text-emerald-400">{formatMoney(order.total)}</div>
