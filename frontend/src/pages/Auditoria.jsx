@@ -71,7 +71,7 @@ export default function Auditoria() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center">
             <svg className="w-6 h-6 mr-3 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
@@ -81,7 +81,7 @@ export default function Auditoria() {
         </div>
         <button 
           onClick={fetchLogs}
-          className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors"
+          className="w-full sm:w-auto bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
         >
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
           Actualizar
@@ -96,7 +96,7 @@ export default function Auditoria() {
         )}
         
         {/* Filters */}
-        <div className="p-4 border-b border-gray-700 bg-gray-850 flex gap-4">
+        <div className="p-4 border-b border-gray-700 bg-gray-850 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <svg className="w-5 h-5 absolute left-3 top-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             <input 
@@ -108,7 +108,7 @@ export default function Auditoria() {
             />
           </div>
           <select 
-            className="bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+            className="w-full sm:w-auto bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
             value={moduleFilter}
             onChange={(e) => setModuleFilter(e.target.value)}
           >
@@ -119,7 +119,46 @@ export default function Auditoria() {
           </select>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="divide-y divide-gray-700 md:hidden">
+          {filteredLogs.map(log => (
+            <div key={log.id} className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-gray-400 text-sm font-medium">{formatDateTime(log.created_at)}</div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <span className="bg-yellow-900/40 text-yellow-400 px-2.5 py-0.5 rounded-full text-xs font-semibold border border-yellow-800/50">
+                    {log.module_name || 'Desconocido'}
+                  </span>
+                  <span className="bg-green-900/40 text-green-400 px-2.5 py-0.5 rounded-full text-xs font-semibold border border-green-800/50">
+                    {log.action_name || 'Generico'}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="text-sm font-bold text-white">{log.entity_type} {log.entity_id ? '#' + log.entity_id : ''}</div>
+                <div className="text-sm text-gray-300 mt-1">{getActionDescription(log)}</div>
+              </div>
+              <div className="grid grid-cols-1 gap-2 text-sm">
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <div className="text-gray-500 text-xs uppercase tracking-wide">Usuario</div>
+                  <div className="text-white font-semibold mt-1">{log.actor_username || '-'}</div>
+                  <div className="text-gray-500 mt-1">{log.actor_role || '-'}</div>
+                </div>
+                <div className="bg-gray-900/60 rounded-lg p-3">
+                  <div className="text-gray-500 text-xs uppercase tracking-wide">Terminal</div>
+                  <div className="text-white font-semibold mt-1">{log.terminal_name || '-'}</div>
+                  <div className="text-gray-500 font-mono text-xs mt-1 break-all">
+                    {log.request_method && log.request_path ? `${log.request_method} ${log.request_path}` : '-'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredLogs.length === 0 && (
+            <div className="p-12 text-center text-gray-400">No se encontraron registros de auditoría.</div>
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <tbody className="divide-y divide-gray-700">
               {filteredLogs.map(log => (

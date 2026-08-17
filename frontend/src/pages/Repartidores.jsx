@@ -156,8 +156,8 @@ export default function Repartidores() {
   });
 
   return (
-    <div className="p-6 relative">
-      <div className="flex justify-between items-center mb-6">
+    <div className="relative space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Flota de Repartidores</h2>
           <p className="text-gray-400 text-sm mt-1">Monitoreo de cadetes y dinero a rendir en tiempo real</p>
@@ -165,7 +165,7 @@ export default function Repartidores() {
         <button
           onClick={exportMovimientos}
           disabled={exporting || !currentLocation?.id}
-          className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors"
+          className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center transition-colors"
         >
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16v-8m0 8l-3-3m3 3l3-3M4 18h16"></path></svg>
           {exporting ? 'Descargando...' : 'Descargar Excel'}
@@ -176,59 +176,105 @@ export default function Repartidores() {
         {loading && repartidores.length === 0 ? (
            <div className="p-8 text-center text-gray-500">Cargando datos de la flota...</div>
         ) : (
-          <table className="w-full text-left text-sm text-gray-400">
-            <thead className="bg-gray-900 text-gray-300 uppercase font-semibold">
-              <tr>
-                <th className="px-6 py-4">Repartidor</th>
-                <th className="px-6 py-4">Turno</th>
-                <th className="px-6 py-4">Estado</th>
-                <th className="px-6 py-4 text-center">Viajes Pendientes</th>
-                <th className="px-6 py-4 text-right">Efectivo a Rendir</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            <div className="divide-y divide-gray-700 md:hidden">
               {repartidores.map((r) => (
-                <tr key={r.id} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
-                  <td className="px-6 py-4 font-medium text-white text-base flex items-center">
-                    <div className="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold mr-3">
-                      {r.name.charAt(0)}
+                <div key={r.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold mr-3 shrink-0">
+                        {r.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-white break-words">{r.name}</div>
+                        <div className="text-sm text-gray-400 mt-1">{r.shift}</div>
+                      </div>
                     </div>
-                    {r.name}
-                  </td>
-                  <td className="px-6 py-4 text-gray-300">{r.shift}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${r.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                    <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-bold ${r.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
                       {r.active ? 'ACTIVO' : 'INACTIVO'}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="bg-gray-900 px-3 py-1 rounded text-gray-300 font-mono">
-                      {r.trips_count}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <span className={`font-bold ${r.pending_cash > 0 ? 'text-emerald-400' : 'text-gray-500'}`}>
-                      ${r.pending_cash.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => viewHistory(r)}
-                      className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors"
-                    >
-                      Ver Viajes
-                    </button>
-                  </td>
-                </tr>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-gray-900/60 rounded-lg p-3">
+                      <div className="text-gray-500 text-xs uppercase tracking-wide">Viajes</div>
+                      <div className="text-white font-semibold mt-1">{r.trips_count}</div>
+                    </div>
+                    <div className="bg-gray-900/60 rounded-lg p-3">
+                      <div className="text-gray-500 text-xs uppercase tracking-wide">Efectivo</div>
+                      <div className={`font-semibold mt-1 ${r.pending_cash > 0 ? 'text-emerald-400' : 'text-gray-400'}`}>
+                        ${r.pending_cash.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => viewHistory(r)}
+                    className="w-full rounded-lg bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 text-sm font-medium transition-colors"
+                  >
+                    Ver Viajes
+                  </button>
+                </div>
               ))}
               {repartidores.length === 0 && (
-                <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">No hay repartidores registrados.</td>
-                </tr>
+                <div className="px-6 py-8 text-center text-gray-500">No hay repartidores registrados.</div>
               )}
-            </tbody>
-          </table>
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-sm text-gray-400">
+                <thead className="bg-gray-900 text-gray-300 uppercase font-semibold">
+                  <tr>
+                    <th className="px-6 py-4">Repartidor</th>
+                    <th className="px-6 py-4">Turno</th>
+                    <th className="px-6 py-4">Estado</th>
+                    <th className="px-6 py-4 text-center">Viajes Pendientes</th>
+                    <th className="px-6 py-4 text-right">Efectivo a Rendir</th>
+                    <th className="px-6 py-4 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {repartidores.map((r) => (
+                    <tr key={r.id} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
+                      <td className="px-6 py-4 font-medium text-white text-base flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold mr-3">
+                          {r.name.charAt(0)}
+                        </div>
+                        {r.name}
+                      </td>
+                      <td className="px-6 py-4 text-gray-300">{r.shift}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${r.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {r.active ? 'ACTIVO' : 'INACTIVO'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="bg-gray-900 px-3 py-1 rounded text-gray-300 font-mono">
+                          {r.trips_count}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <span className={`font-bold ${r.pending_cash > 0 ? 'text-emerald-400' : 'text-gray-500'}`}>
+                          ${r.pending_cash.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button 
+                          onClick={() => viewHistory(r)}
+                          className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors"
+                        >
+                          Ver Viajes
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {repartidores.length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-8 text-center text-gray-500">No hay repartidores registrados.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
