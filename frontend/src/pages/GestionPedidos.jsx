@@ -81,6 +81,14 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
     (o.client_name && o.client_name.toLowerCase().includes(search.toLowerCase()))
   ) : [];
 
+  const formatMoney = (value) => `$${Number(value || 0).toLocaleString('es-AR')}`;
+
+  const getClientName = (order) =>
+    String(order?.client_name || order?.customer_name || '').trim() || 'Cliente Mostrador';
+
+  const getItemName = (item) =>
+    String(item?.product_name || item?.name || '').trim() || 'Producto';
+
   return (
     <div className="flex flex-col h-full bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden shadow-2xl">
       {/* Header & Search */}
@@ -143,28 +151,72 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                       </div>
                       <div className="flex items-center text-gray-400 text-sm mt-2">
                         <User className="w-4 h-4 mr-1.5" />
-                        {order.client_name || 'Cliente Mostrador'}
+                        {getClientName(order)}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xl font-bold text-emerald-400">${order.total}</div>
+                      <div className="text-xl font-bold text-emerald-400">{formatMoney(order.total)}</div>
                       <div className="flex items-center justify-end text-gray-500 text-xs mt-1 uppercase tracking-wide">
                         <CreditCard className="w-3.5 h-3.5 mr-1" />
-                        {order.payment_method}
+                        {order.payment_method || 'sin definir'}
                       </div>
                     </div>
                   </div>
 
                   <div className="p-5 flex-1">
                     <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Detalle del Pedido</h4>
-                    <ul className="space-y-2">
-                      {order.items && order.items.map((item, i) => (
-                        <li key={i} className="flex justify-between text-sm">
-                          <span className="text-gray-300"><span className="text-gray-500 mr-2">{item.quantity}x</span>{item.name}</span>
-                          <span className="text-gray-400 font-medium">${item.price * item.quantity}</span>
-                        </li>
+                    <div className="space-y-3">
+                      {(order.items || []).map((item, i) => (
+                        <div key={i} className="border-b border-gray-700/50 pb-3 last:border-0 last:pb-0">
+                          <div className="flex justify-between gap-3 text-sm">
+                            <span className="text-gray-200 break-words">
+                              <span className="text-orange-400 font-semibold mr-2">{item.quantity || 1}x</span>
+                              {getItemName(item)}
+                            </span>
+                            <span className="text-gray-400 font-medium whitespace-nowrap">
+                              {formatMoney((Number(item.price || 0) * Number(item.quantity || 1)))}
+                            </span>
+                          </div>
+
+                          {Array.isArray(item.guarniciones) && item.guarniciones.length > 0 && (
+                            <div className="mt-2 pl-5 space-y-1">
+                              {item.guarniciones.map((g, gi) => (
+                                <div key={gi} className="text-xs text-gray-400 flex items-center">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-orange-500/50 mr-2"></div>
+                                  {g.quantity || 1}x {g.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {Array.isArray(item.extras) && item.extras.length > 0 && (
+                            <div className="mt-2 pl-5 space-y-1">
+                              {item.extras.map((extra, extraIndex) => (
+                                <div key={extraIndex} className="text-xs text-blue-400 flex items-center">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50 mr-2"></div>
+                                  + {extra.quantity || 1}x {extra.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {Array.isArray(item.toppings) && item.toppings.length > 0 && (
+                            <div className="mt-2 pl-5 space-y-1">
+                              {item.toppings.map((topping, toppingIndex) => (
+                                <div key={toppingIndex} className="text-xs text-emerald-400 flex items-center">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 mr-2"></div>
+                                  + {topping.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ))}
-                    </ul>
+
+                      {(!order.items || order.items.length === 0) && (
+                        <div className="text-sm text-gray-500">Sin detalle de productos disponible.</div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="p-4 bg-gray-900/50 flex gap-3 border-t border-gray-800">
