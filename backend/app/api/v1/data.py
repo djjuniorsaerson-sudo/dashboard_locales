@@ -24,10 +24,11 @@ def get_integration_client():
     
     db = SessionLocal()
     try:
-        install = db.query(YummyInstallation).filter(
-            YummyInstallation.connection_status == "ONLINE"
-        ).order_by(YummyInstallation.last_health_check.desc()).first()
-        if install:
+        install = db.query(YummyInstallation).order_by(
+            YummyInstallation.last_health_check.desc().nullslast(),
+            YummyInstallation.created_at.desc(),
+        ).first()
+        if install and installation_is_online(install):
             return YummyIntegrationClient(install.base_url, install.api_key)
         return None
     finally:
@@ -75,6 +76,7 @@ EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
 CASHBOX_SNAPSHOT_KEY = "cashbox_report_snapshot_v1"
 ACTIVE_ORDERS_SNAPSHOT_KEY = "active_orders_snapshot_v1"
 AUDIT_LOGS_SNAPSHOT_KEY = "audit_logs_snapshot_v1"
+OFFLINE_FALLBACK_THRESHOLD_SECONDS = 20
 
 
 def _fetch_active_orders_for_installation(db: Session, current_user: User, installation_id: Optional[str] = None):
@@ -82,7 +84,7 @@ def _fetch_active_orders_for_installation(db: Session, current_user: User, insta
     if not install:
         return []
 
-    if install.connection_status == "ONLINE":
+    if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
             parsed = client.request("GET", "/api/pedidos")
@@ -137,10 +139,27 @@ def get_installation_for_user(
     )
     if installation_id:
         query = query.filter(YummyInstallation.id == installation_id)
-    if online_only:
-        query = query.filter(YummyInstallation.connection_status == "ONLINE")
-        return query.order_by(YummyInstallation.last_health_check.desc()).first()
-    return query.order_by(YummyInstallation.last_health_check.desc().nullslast(), YummyInstallation.created_at.desc()).first()
+    install = query.order_by(YummyInstallation.last_health_check.desc().nullslast(), YummyInstallation.created_at.desc()).first()
+    if online_only and not installation_is_online(install):
+        return None
+    return install
+
+
+def installation_runtime_status(install: Optional[YummyInstallation]) -> str:
+    if not install:
+        return "OFFLINE"
+    if str(install.connection_status or "").upper() == "REVOKED":
+        return "REVOKED"
+    if not install.last_health_check:
+        return str(install.connection_status or "PENDING").upper()
+    elapsed = (datetime.utcnow() - install.last_health_check).total_seconds()
+    if elapsed > OFFLINE_FALLBACK_THRESHOLD_SECONDS:
+        return "OFFLINE"
+    return "ONLINE"
+
+
+def installation_is_online(install: Optional[YummyInstallation]) -> bool:
+    return installation_runtime_status(install) == "ONLINE"
 
 
 def save_installation_snapshot(
@@ -204,12 +223,11 @@ def get_integration_client_for_installation(
 
     query = db.query(YummyInstallation).filter(
         YummyInstallation.organization_id == current_user.organization_id,
-        YummyInstallation.connection_status == "ONLINE",
     )
     if installation_id:
         query = query.filter(YummyInstallation.id == installation_id)
-    install = query.order_by(YummyInstallation.last_health_check.desc()).first()
-    if not install:
+    install = query.order_by(YummyInstallation.last_health_check.desc().nullslast(), YummyInstallation.created_at.desc()).first()
+    if not install or not installation_is_online(install):
         raise HTTPException(status_code=503, detail="Yummy is not ONLINE")
     return YummyIntegrationClient(install.base_url, install.api_key)
 
@@ -266,7 +284,7 @@ def get_employees(
     if not install:
         return []
 
-    if install.connection_status == "ONLINE":
+    if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
             remote = deps.RemoteSession(client)
@@ -297,7 +315,7 @@ def get_empleado_novedades(
     if not install:
         return []
 
-    if install.connection_status == "ONLINE":
+    if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
             remote = deps.RemoteSession(client)
@@ -375,7 +393,7 @@ def get_caja_report(
     if not install:
         return []
 
-    if install.connection_status == "ONLINE":
+    if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
             remote = deps.RemoteSession(client)
@@ -452,8 +470,11 @@ def get_dashboard_metrics(db: Session = Depends(deps.get_db)):
     from app.models.yummy import YummyInstallation
     from app.services.yummy_client import YummyIntegrationClient
     
-    install = db.query(YummyInstallation).filter(YummyInstallation.connection_status == "ONLINE").first()
-    if not install:
+    install = db.query(YummyInstallation).order_by(
+        YummyInstallation.last_health_check.desc().nullslast(),
+        YummyInstallation.created_at.desc(),
+    ).first()
+    if not install or not installation_is_online(install):
         return {
             "ventas_turno": 0, "pedidos_activos": 0, "pedidos_finalizados": 0,
             "product_sales": [], "stock_levels": []
@@ -766,7 +787,7 @@ def get_audit_logs(
     if not install:
         return []
 
-    if install.connection_status == "ONLINE":
+    if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
             remote = deps.RemoteSession(client)
