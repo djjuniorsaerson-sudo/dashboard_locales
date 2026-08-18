@@ -93,11 +93,24 @@ export default function Dashboard({ setIsSyncing }) {
   };
 
   return (
-    <div>
-      <div className="mb-6 flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <div>
-            <h2 className="text-2xl font-bold text-white mb-1">Métricas en Tiempo Real</h2>
-            <p className="text-gray-400">Viendo datos del <span className="text-white font-semibold">Turno Actual Abierto</span> en {currentLocation?.name || 'Local Central'}</p>
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-6 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
+        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+          <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-300/80 mb-2">Resumen operativo</p>
+              <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Métricas en Tiempo Real</h2>
+              <p className="text-gray-400">Viendo datos del <span className="text-white font-semibold">Turno Actual Abierto</span> en {currentLocation?.name || 'Local Central'}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-2xl border border-white/10 bg-gray-950/40 px-4 py-3">
+              <div className="text-gray-500 text-xs uppercase tracking-wider">Local</div>
+              <div className="text-white font-bold mt-1">{currentLocation?.name || 'Sin local'}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-gray-950/40 px-4 py-3">
+              <div className="text-gray-500 text-xs uppercase tracking-wider">Estado</div>
+              <div className="text-emerald-300 font-bold mt-1">{currentLocation?.status || 'Sin dato'}</div>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -109,17 +122,21 @@ export default function Dashboard({ setIsSyncing }) {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-lg relative overflow-hidden">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-800/80 p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.16),_transparent_34%)]"></div>
               <div className="absolute top-0 right-0 p-4 opacity-10"><svg className="w-16 h-16 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd"/></svg></div>
-              <h3 className="text-gray-400 text-sm font-medium relative z-10 uppercase tracking-wider">Total Vendido (Turno)</h3>
-              <p className="text-3xl sm:text-4xl font-bold mt-2 text-white relative z-10 break-all">${metrics.ventas_turno.toLocaleString()}</p>
+              <h3 className="text-gray-400 text-sm font-semibold relative z-10 uppercase tracking-[0.16em]">Total Vendido (Turno)</h3>
+              <p className="text-3xl sm:text-4xl font-black mt-3 text-white relative z-10 break-all">${metrics.ventas_turno.toLocaleString()}</p>
+              <p className="relative z-10 mt-3 text-xs text-gray-500">Ingreso del turno actualmente abierto</p>
             </div>
             
-            <div className="bg-gray-800 p-6 rounded-2xl border border-orange-700/50 shadow-lg relative overflow-hidden ring-1 ring-orange-500/20">
+            <div className="bg-gradient-to-br from-orange-950/30 to-slate-800 p-6 rounded-3xl border border-orange-500/30 shadow-xl relative overflow-hidden ring-1 ring-orange-500/20">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(249,115,22,0.16),_transparent_34%)]"></div>
               <div className="absolute top-0 right-0 p-4 opacity-10"><svg className="w-16 h-16 text-orange-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd"/></svg></div>
-              <h3 className="text-orange-400 text-sm font-bold relative z-10 uppercase tracking-wider">Pedidos Activos en Cocina</h3>
-              <p className="text-3xl sm:text-4xl font-bold mt-2 text-white relative z-10">{metrics.pedidos_activos}</p>
+              <h3 className="text-orange-300 text-sm font-bold relative z-10 uppercase tracking-[0.16em]">Pedidos Activos en Cocina</h3>
+              <p className="text-3xl sm:text-4xl font-black mt-3 text-white relative z-10">{metrics.pedidos_activos}</p>
+              <p className="relative z-10 mt-3 text-xs text-orange-200/70">Pedidos todavía en preparación</p>
               {metrics.pedidos_activos > 0 && (
                 <div className="absolute bottom-4 right-4 flex items-center">
                     <span className="w-3 h-3 rounded-full bg-orange-500 mr-2 animate-ping"></span>
@@ -128,10 +145,12 @@ export default function Dashboard({ setIsSyncing }) {
               )}
             </div>
 
-            <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-lg relative overflow-hidden">
+            <div className="bg-gradient-to-br from-emerald-950/20 to-slate-800 p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.16),_transparent_34%)]"></div>
               <div className="absolute top-0 right-0 p-4 opacity-10"><svg className="w-16 h-16 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg></div>
-              <h3 className="text-gray-400 text-sm font-medium relative z-10 uppercase tracking-wider">Pedidos Entregados</h3>
-              <p className="text-3xl sm:text-4xl font-bold mt-2 text-emerald-400 relative z-10">{metrics.pedidos_finalizados}</p>
+              <h3 className="text-gray-400 text-sm font-semibold relative z-10 uppercase tracking-[0.16em]">Pedidos Entregados</h3>
+              <p className="text-3xl sm:text-4xl font-black mt-3 text-emerald-400 relative z-10">{metrics.pedidos_finalizados}</p>
+              <p className="relative z-10 mt-3 text-xs text-gray-500">Despachos finalizados durante el día</p>
             </div>
           </div>
 
@@ -141,10 +160,10 @@ export default function Dashboard({ setIsSyncing }) {
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-gray-900/60 backdrop-blur-xl rounded-3xl border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col relative"
+              className="bg-white/[0.03] backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col relative"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
-              <div className="p-5 border-b border-gray-800/80 bg-gray-900/50 flex justify-between items-center z-10">
+              <div className="p-5 border-b border-white/10 bg-black/10 flex justify-between items-center z-10">
                 <h3 className="text-xl font-bold text-white flex items-center tracking-wide">
                   <svg className="w-6 h-6 mr-3 text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                   Productos Vendidos
@@ -160,7 +179,7 @@ export default function Dashboard({ setIsSyncing }) {
                         transition={{ delay: idx * 0.05 }}
                         whileHover={{ scale: 1.05, y: -4 }}
                         key={idx} 
-                        className="flex-shrink-0 flex flex-col p-4 bg-gray-800/40 backdrop-blur-md rounded-2xl border border-gray-700/50 hover:border-blue-500/50 shadow-lg hover:shadow-blue-500/10 transition-all group min-w-[135px] sm:min-w-[140px]"
+                        className="flex-shrink-0 flex flex-col p-4 bg-gray-900/45 backdrop-blur-md rounded-2xl border border-white/10 hover:border-blue-500/40 shadow-lg hover:shadow-blue-500/10 transition-all group min-w-[135px] sm:min-w-[140px]"
                       >
                         <span className="text-white font-bold mb-3 text-base whitespace-nowrap group-hover:text-blue-400 transition-colors" title={item.name}>{item.name}</span>
                         <div className="flex items-center justify-between gap-4 mt-auto">
@@ -190,10 +209,10 @@ export default function Dashboard({ setIsSyncing }) {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="bg-gray-900/60 backdrop-blur-xl rounded-3xl border border-gray-800/50 shadow-2xl overflow-hidden flex flex-col max-h-[450px] relative"
+              className="bg-white/[0.03] backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[450px] relative"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 via-rose-500 to-purple-500"></div>
-              <div className="p-5 border-b border-gray-800/80 bg-gray-900/50 sticky top-0 flex justify-between items-center z-10">
+              <div className="p-5 border-b border-white/10 bg-black/10 sticky top-0 flex justify-between items-center z-10">
                 <h3 className="text-xl font-bold text-white flex items-center tracking-wide">
                   <svg className="w-6 h-6 mr-3 text-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
                   Niveles de Stock Actual
@@ -212,7 +231,7 @@ export default function Dashboard({ setIsSyncing }) {
                           whileHover={{ scale: 1.03 }}
                           onClick={() => handleAddStock(item)}
                           key={item.id} 
-                          className={`cursor-pointer flex items-center justify-between p-4 rounded-2xl border shadow-md transition-all ${isLowStock ? 'bg-red-500/10 border-red-500/40 hover:border-red-500/80 shadow-[inset_0_0_20px_rgba(239,68,68,0.1)]' : 'bg-gray-800/40 backdrop-blur-sm border-gray-700/50 hover:border-emerald-500/50'}`}
+                          className={`cursor-pointer flex items-center justify-between p-4 rounded-2xl border shadow-md transition-all ${isLowStock ? 'bg-red-500/10 border-red-500/40 hover:border-red-500/80 shadow-[inset_0_0_20px_rgba(239,68,68,0.1)]' : 'bg-gray-900/45 backdrop-blur-sm border-white/10 hover:border-emerald-500/40'}`}
                         >
                           <span className={`font-semibold truncate pr-3 ${isLowStock ? 'text-red-200' : 'text-gray-200'}`} title={item.name}>{item.name}</span>
                           <span className={`px-3 py-1.5 rounded-lg font-black text-sm shadow-inner ${isLowStock ? 'bg-red-500/20 text-red-400 shadow-red-500/30 animate-pulse' : 'bg-gray-900/80 text-emerald-400 shadow-black/50'}`}>
