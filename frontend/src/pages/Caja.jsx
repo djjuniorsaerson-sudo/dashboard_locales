@@ -288,17 +288,19 @@ export default function Caja() {
   };
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+    <div className="space-y-6 p-4 sm:p-6">
+      <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-6 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Gestión de Caja</h2>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/80 mb-2">Control financiero</p>
+          <h2 className="text-3xl font-black text-white tracking-tight">Gestión de Caja</h2>
           <p className="text-gray-400 text-sm mt-1">Control integral de ingresos, salidas y turnos</p>
         </div>
         <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:flex-wrap">
           <button
             onClick={() => handleOpenModal('saldo_inicial')}
             disabled={isOffline}
-            className={`text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center transition-colors ${isOffline ? 'bg-green-900/40 cursor-not-allowed opacity-60' : 'bg-green-600 hover:bg-green-700'}`}
+            className={`text-white px-4 py-3 rounded-2xl text-sm font-bold flex items-center justify-center transition-colors shadow-lg ${isOffline ? 'bg-green-900/40 cursor-not-allowed opacity-60' : 'bg-green-600 hover:bg-green-700'}`}
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
             Iniciar Caja
@@ -306,7 +308,7 @@ export default function Caja() {
           <button
             onClick={() => handleOpenModal('retiro')}
             disabled={isOffline}
-            className={`text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center transition-colors ${isOffline ? 'bg-orange-900/40 cursor-not-allowed opacity-60' : 'bg-orange-500 hover:bg-orange-600'}`}
+            className={`text-white px-4 py-3 rounded-2xl text-sm font-bold flex items-center justify-center transition-colors shadow-lg ${isOffline ? 'bg-orange-900/40 cursor-not-allowed opacity-60' : 'bg-orange-500 hover:bg-orange-600'}`}
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4"></path></svg>
             Retiro
@@ -314,12 +316,13 @@ export default function Caja() {
           <button
             onClick={() => handleOpenModal('reset_turno')}
             disabled={isOffline}
-            className={`col-span-2 sm:col-span-1 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center transition-colors ${isOffline ? 'bg-red-900/40 cursor-not-allowed opacity-60' : 'bg-red-600 hover:bg-red-700'}`}
+            className={`col-span-2 sm:col-span-1 text-white px-4 py-3 rounded-2xl text-sm font-bold flex items-center justify-center transition-colors shadow-lg ${isOffline ? 'bg-red-900/40 cursor-not-allowed opacity-60' : 'bg-red-600 hover:bg-red-700'}`}
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
             Cerrar Caja
           </button>
         </div>
+      </div>
       </div>
 
       {isOffline && (
@@ -335,13 +338,13 @@ export default function Caja() {
            <div className="p-8 text-center text-gray-500 bg-gray-800 rounded-xl">No hay datos de caja registrados recientes.</div>
         ) : (
           reportes.map((dayReport) => (
-            <div key={dayReport.date} className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden shadow-lg">
+            <div key={dayReport.date} className="bg-white/[0.03] rounded-3xl border border-white/10 overflow-hidden shadow-2xl backdrop-blur-xl">
               {/* Encabezado del Día */}
               {(() => {
                 const summary = getDaySummary(dayReport);
                 return (
               <div 
-                className="bg-gray-900 p-4 sm:p-5 md:px-6 md:py-6 cursor-pointer hover:bg-gray-850 transition-colors"
+                className="bg-black/10 p-4 sm:p-5 md:px-6 md:py-6 cursor-pointer hover:bg-white/[0.03] transition-colors"
                 onClick={() => toggleDay(dayReport.date)}
               >
                 <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
@@ -356,7 +359,7 @@ export default function Caja() {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="bg-gray-800/90 border border-gray-700 rounded-xl px-4 py-3 min-w-0">
+                        <div className="bg-gray-900/45 border border-white/10 rounded-2xl px-4 py-3 min-w-0">
                           <p className="text-xs font-bold uppercase tracking-wide text-blue-400">Estado de caja ahora</p>
                           <p className="mt-1 text-lg font-bold text-white">
                             {summary.activeShift && !summary.activeShift.end_time ? 'Caja abierta' : 'Caja cerrada'}
@@ -377,7 +380,7 @@ export default function Caja() {
                           </div>
                         </div>
 
-                        <div className="bg-gray-800/90 border border-gray-700 rounded-xl px-4 py-3 min-w-0">
+                        <div className="bg-gray-900/45 border border-white/10 rounded-2xl px-4 py-3 min-w-0">
                           <p className="text-xs font-bold uppercase tracking-wide text-emerald-400">Resumen rápido</p>
                           <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
                             <div>
@@ -403,19 +406,19 @@ export default function Caja() {
                   </div>
 
                   <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 xl:min-w-[620px]">
-                    <div className="bg-gray-800 px-3 sm:px-4 py-3 rounded-xl border border-gray-700">
+                    <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border border-white/10">
                       <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Saldo inicial</p>
                       <p className="text-base sm:text-lg font-bold text-white mt-1 break-words">{formatMoney(summary.openingBalance)}</p>
                     </div>
-                    <div className="bg-gray-800 px-3 sm:px-4 py-3 rounded-xl border border-gray-700">
+                    <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border border-white/10">
                       <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Cobrado hoy</p>
                       <p className="text-base sm:text-lg font-bold text-emerald-500 mt-1 break-words">{formatMoney(summary.totalSales)}</p>
                     </div>
-                    <div className="bg-gray-800 px-3 sm:px-4 py-3 rounded-xl border border-gray-700">
+                    <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border border-white/10">
                       <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Retiros</p>
                       <p className="text-base sm:text-lg font-bold text-red-400 mt-1 break-words">-{formatMoney(summary.totalWithdrawals)}</p>
                     </div>
-                    <div className="bg-gray-800 px-3 sm:px-4 py-3 rounded-xl border-2 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
+                    <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border-2 border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
                       <p className="text-xs text-blue-400 font-bold uppercase tracking-wide">Efectivo esperado</p>
                       <p className="text-lg sm:text-xl font-black text-white mt-1 break-words">{formatMoney(summary.expectedCash)}</p>
                     </div>

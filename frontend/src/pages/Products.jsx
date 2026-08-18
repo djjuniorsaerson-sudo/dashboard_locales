@@ -46,9 +46,10 @@ export default function Products() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="mb-2 sm:mb-6">
+      <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-6 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
         <div>
-          <h2 className="text-2xl font-bold text-white">Catálogo Sincronizado</h2>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-300/80 mb-2">Datos sincronizados</p>
+          <h2 className="text-3xl font-black text-white tracking-tight">Catálogo Sincronizado</h2>
           <p className="text-gray-400 text-sm mt-1 max-w-2xl">
             Datos centralizados del local activo. Esta vista no depende de una consulta en vivo.
           </p>
@@ -56,21 +57,21 @@ export default function Products() {
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-        <div className="col-span-2 xl:col-span-1 bg-gray-800 rounded-xl border border-gray-700 p-5">
+        <div className="col-span-2 xl:col-span-1 bg-white/[0.03] rounded-2xl border border-white/10 p-5 shadow-lg">
           <div className="text-gray-400 text-sm">Local activo</div>
           <div className="text-white font-bold mt-1">{currentLocation?.name || 'Sin local seleccionado'}</div>
         </div>
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-5">
+        <div className="bg-white/[0.03] rounded-2xl border border-white/10 p-5 shadow-lg">
           <div className="text-gray-400 text-sm">Categorías</div>
           <div className="text-white font-bold mt-1">{categories.length}</div>
         </div>
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-5">
+        <div className="bg-white/[0.03] rounded-2xl border border-white/10 p-5 shadow-lg">
           <div className="text-gray-400 text-sm">Productos</div>
           <div className="text-white font-bold mt-1">{products.length}</div>
         </div>
       </div>
 
-      <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 mb-6">
+      <div className="bg-white/[0.03] rounded-3xl border border-white/10 p-5 mb-6 shadow-xl">
         <h3 className="text-lg font-semibold text-white mb-3">Categorías sincronizadas</h3>
         {categories.length === 0 ? (
           <p className="text-gray-500 text-sm">Todavía no hay categorías sincronizadas.</p>
@@ -88,7 +89,7 @@ export default function Products() {
         )}
       </div>
 
-      <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-lg">
+      <div className="bg-white/[0.03] rounded-3xl border border-white/10 overflow-hidden shadow-2xl backdrop-blur-xl">
         {loading ? (
           <div className="p-8 text-center text-gray-500">Cargando catálogo central...</div>
         ) : (
@@ -106,11 +107,11 @@ export default function Products() {
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="bg-gray-900/60 rounded-lg p-3">
+                    <div className="bg-gray-900/60 rounded-xl p-3 border border-white/10">
                       <div className="text-gray-500 text-xs uppercase tracking-wide">Precio</div>
                       <div className="text-white font-semibold mt-1">${Number(product.price || 0).toLocaleString()}</div>
                     </div>
-                    <div className="bg-gray-900/60 rounded-lg p-3">
+                    <div className="bg-gray-900/60 rounded-xl p-3 border border-white/10">
                       <div className="text-gray-500 text-xs uppercase tracking-wide">Stock</div>
                       <div className="text-white font-semibold mt-1">{Number(product.stock || 0).toLocaleString()}</div>
                     </div>
@@ -126,7 +127,7 @@ export default function Products() {
 
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm text-gray-400">
-                <thead className="bg-gray-900 text-gray-300 uppercase font-semibold">
+                <thead className="bg-black/10 text-gray-300 uppercase font-semibold">
                   <tr>
                     <th className="px-6 py-4">Nombre</th>
                     <th className="px-6 py-4">Categoría</th>
@@ -137,7 +138,7 @@ export default function Products() {
                 </thead>
                 <tbody>
                   {products.map((product) => (
-                    <tr key={product.id} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
+                    <tr key={product.id} className="border-t border-white/10 hover:bg-white/[0.03] transition-colors">
                       <td className="px-6 py-4 font-medium text-white">{product.name}</td>
                       <td className="px-6 py-4">{getCategoryName(product)}</td>
                       <td className="px-6 py-4">${Number(product.price || 0).toLocaleString()}</td>

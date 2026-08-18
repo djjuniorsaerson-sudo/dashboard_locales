@@ -128,18 +128,19 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
     String(item?.product_name || item?.name || '').trim() || 'Producto';
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden shadow-2xl">
+    <div className="flex flex-col h-full bg-white/[0.03] rounded-3xl border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl">
       {/* Header & Search */}
-      <div className="p-6 border-b border-gray-800 bg-gray-800/50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+      <div className="p-6 border-b border-white/10 bg-black/10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Pedidos Activos</h2>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-300/80 mb-2">Operación en curso</p>
+          <h2 className="text-3xl font-black text-white tracking-tight">Pedidos Activos</h2>
           <p className="text-sm text-gray-400 mt-1">Gestiona, edita o cancela órdenes en curso.</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
           <button
             onClick={exportOrders}
             disabled={exporting || !currentLocation?.id}
-            className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:text-emerald-300/60 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl font-bold transition-colors w-full sm:w-auto"
+            className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/40 disabled:text-emerald-300/60 disabled:cursor-not-allowed text-white px-4 py-3 rounded-2xl font-bold transition-colors w-full sm:w-auto shadow-lg shadow-emerald-950/20"
           >
             <Download className="w-4 h-4" />
             {exporting ? 'Descargando...' : 'Descargar Excel'}
@@ -151,10 +152,10 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
               placeholder="Buscar por ID o Cliente..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-gray-950 border border-gray-700 text-white rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all"
-            />
-          </div>
+            className="w-full bg-gray-950/70 border border-white/10 text-white rounded-2xl pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all"
+          />
         </div>
+      </div>
       </div>
 
       {isOffline && (
@@ -175,7 +176,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
             <p className="text-lg">No hay pedidos activos que coincidan.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             <AnimatePresence>
               {filteredOrders.map((order, idx) => (
                 <motion.div
@@ -184,9 +185,9 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ delay: idx * 0.05 }}
-                  className="bg-gray-800/80 rounded-2xl border border-gray-700 overflow-hidden hover:border-gray-600 transition-colors flex flex-col"
+                  className="bg-gray-900/50 rounded-3xl border border-white/10 overflow-hidden hover:border-purple-500/30 transition-colors flex flex-col shadow-xl"
                 >
-                  <div className="p-5 border-b border-gray-700/50 flex justify-between items-start">
+                  <div className="p-5 border-b border-white/10 flex justify-between items-start bg-black/10">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-lg font-bold text-white">#{order.id}</span>
@@ -202,13 +203,13 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                         {getClientName(order)}
                       </div>
                       {getAddress(order) && (
-                        <div className="text-gray-500 text-xs mt-1 break-words max-w-[240px]">
+                        <div className="text-gray-500 text-xs mt-2 break-words max-w-[240px]">
                           {getAddress(order)}
                         </div>
                       )}
                     </div>
                     <div className="text-right">
-                      <div className="text-xl font-bold text-emerald-400">{formatMoney(order.total)}</div>
+                      <div className="text-2xl font-black text-emerald-400">{formatMoney(order.total)}</div>
                       <div className="flex items-center justify-end text-gray-500 text-xs mt-1 uppercase tracking-wide">
                         <CreditCard className="w-3.5 h-3.5 mr-1" />
                         {order.payment_method || 'sin definir'}
@@ -217,10 +218,10 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                   </div>
 
                   <div className="p-5 flex-1">
-                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Detalle del Pedido</h4>
+                    <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.16em] mb-3">Detalle del Pedido</h4>
                     <div className="space-y-3">
                       {(order.items || []).map((item, i) => (
-                        <div key={i} className="border-b border-gray-700/50 pb-3 last:border-0 last:pb-0">
+                        <div key={i} className="border-b border-white/10 pb-3 last:border-0 last:pb-0">
                           <div className="flex justify-between gap-3 text-sm">
                             <span className="text-gray-200 break-words">
                               <span className="text-orange-400 font-semibold mr-2">{item.quantity || 1}x</span>
@@ -272,11 +273,11 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                     </div>
                   </div>
 
-                  <div className="p-4 bg-gray-900/50 flex gap-3 border-t border-gray-800">
+                  <div className="p-4 bg-black/10 flex gap-3 border-t border-white/10">
                     <button 
                       onClick={() => handleCancel(order.id)}
                       disabled={isOffline}
-                      className={`flex-1 flex items-center justify-center px-4 py-2.5 border rounded-xl font-medium transition-all ${isOffline ? 'bg-red-900/20 text-red-300/60 border-red-500/10 cursor-not-allowed opacity-60' : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 hover:text-red-300'}`}
+                      className={`flex-1 flex items-center justify-center px-4 py-3 border rounded-2xl font-semibold transition-all ${isOffline ? 'bg-red-900/20 text-red-300/60 border-red-500/10 cursor-not-allowed opacity-60' : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 hover:text-red-300'}`}
                     >
                       <XCircle className="w-4 h-4 mr-2" />
                       Anular
@@ -284,7 +285,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                     <button 
                       onClick={() => handleEdit(order)}
                       disabled={isOffline}
-                      className={`flex-1 flex items-center justify-center px-4 py-2.5 border rounded-xl font-medium transition-all ${isOffline ? 'bg-blue-900/20 text-blue-300/60 border-blue-500/10 cursor-not-allowed opacity-60' : 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300'}`}
+                      className={`flex-1 flex items-center justify-center px-4 py-3 border rounded-2xl font-semibold transition-all ${isOffline ? 'bg-blue-900/20 text-blue-300/60 border-blue-500/10 cursor-not-allowed opacity-60' : 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-300'}`}
                     >
                       <Edit className="w-4 h-4 mr-2" />
                       Editar
