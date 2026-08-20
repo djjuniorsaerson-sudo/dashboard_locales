@@ -10,28 +10,26 @@ from app.core.security import get_password_hash
 import uuid
 
 DEFAULT_ADMIN_EMAIL = "admin@empresa.com"
+DEFAULT_ADMIN_PASSWORD = "AdminTemporal2026!"
 DEFAULT_ORGANIZATION_NAME = "Empresa Demo"
-
-
-def get_required_env(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if not value:
-        raise RuntimeError(f"Missing required environment variable: {name}")
-    return value
 
 
 def create_admin():
     db = SessionLocal()
     try:
         admin_email = os.getenv("ADMIN_EMAIL", DEFAULT_ADMIN_EMAIL).strip().lower()
+        admin_password = os.getenv("ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD).strip() or DEFAULT_ADMIN_PASSWORD
         organization_name = os.getenv("ADMIN_ORGANIZATION_NAME", DEFAULT_ORGANIZATION_NAME).strip() or DEFAULT_ORGANIZATION_NAME
 
-        existing_user = db.query(User).filter(User.email == admin_email).first()
+        existing_user = db.query(User).filter(User.role == "ADMIN").first()
         if existing_user:
-            print(f"Admin user {admin_email} already exists. Skipping reset.")
+            if existing_user.force_password_change:
+                existing_user.password_hash = get_password_hash(admin_password)
+                db.commit()
+                print(f"Admin user {existing_user.email} pending first setup. Temporary password refreshed.")
+            else:
+                print(f"Admin user {existing_user.email} already exists. Skipping reset.")
             return
-
-        admin_password = get_required_env("ADMIN_PASSWORD")
 
         org = db.query(Organization).first()
         if not org:

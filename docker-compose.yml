@@ -6,9 +6,9 @@ services:
     container_name: central-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${CENTRAL_DB_USER}
-      POSTGRES_PASSWORD: ${CENTRAL_DB_PASSWORD}
-      POSTGRES_DB: ${CENTRAL_DB_NAME}
+      POSTGRES_USER: ${CENTRAL_DB_USER:-central_admin}
+      POSTGRES_PASSWORD: ${CENTRAL_DB_PASSWORD:-central_password_123}
+      POSTGRES_DB: ${CENTRAL_DB_NAME:-central_db}
     volumes:
       - central_data:/var/lib/postgresql/data
 
@@ -22,10 +22,10 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - DATABASE_URL=postgresql://${CENTRAL_DB_USER}:${CENTRAL_DB_PASSWORD}@central-db:5432/${CENTRAL_DB_NAME}
-      - SECRET_KEY=${SECRET_KEY}
-      - ADMIN_EMAIL=${ADMIN_EMAIL}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DATABASE_URL=postgresql://${CENTRAL_DB_USER:-central_admin}:${CENTRAL_DB_PASSWORD:-central_password_123}@central-db:5432/${CENTRAL_DB_NAME:-central_db}
+      - SECRET_KEY=${SECRET_KEY:-panel_secret_temporal_2026_cambiar_despues}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@empresa.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-AdminTemporal2026!}
       - ADMIN_ORGANIZATION_NAME=${ADMIN_ORGANIZATION_NAME:-Empresa Demo}
       - YUMMY_DB_URL=${YUMMY_DB_URL:-}
     depends_on:
