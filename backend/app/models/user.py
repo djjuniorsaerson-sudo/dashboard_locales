@@ -13,5 +13,6 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(String, default="VIEWER")
     is_active = Column(Boolean, default=True)
+    force_password_change = Column(Boolean, default=False, nullable=False)
     
     organization = relationship("Organization", back_populates="users")

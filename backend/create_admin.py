@@ -46,7 +46,8 @@ def create_admin():
             password_hash=get_password_hash(admin_password),
             role="ADMIN",
             organization_id=org.id,
-            is_active=True
+            is_active=True,
+            force_password_change=True
         )
         db.add(user)
         db.commit()

@@ -14,6 +14,7 @@ class UserResponse(UserBase):
     id: UUID
     organization_id: UUID
     is_active: bool
+    force_password_change: bool
 
     class Config:
         from_attributes = True
@@ -26,3 +27,8 @@ class TokenPayload(BaseModel):
     sub: Optional[str] = None
     role: Optional[str] = None
     org_id: Optional[str] = None
+
+
+class ChangeOwnPassword(BaseModel):
+    current_password: str
+    new_password: str

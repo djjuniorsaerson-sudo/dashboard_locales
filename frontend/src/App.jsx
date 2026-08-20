@@ -12,6 +12,7 @@ import NuevoPedido from './pages/NuevoPedido';
 import GestionPedidos from './pages/GestionPedidos';
 import Usuarios from './pages/Usuarios';
 import Auditoria from './pages/Auditoria';
+import ForcePasswordChange from './pages/ForcePasswordChange';
 
 import Cocina from './pages/Cocina';
 
@@ -214,8 +215,10 @@ function MainLayout() {
 }
 
 function App() {
-  const { isAuthenticated } = useAuth();
-  return <>{isAuthenticated ? <MainLayout /> : <Login />}</>;
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated) return <Login />;
+  if (user?.force_password_change) return <ForcePasswordChange />;
+  return <MainLayout />;
 }
 
 export default App;

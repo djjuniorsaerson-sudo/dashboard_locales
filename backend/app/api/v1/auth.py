@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.api import deps
-from app.core.security import create_access_token, verify_password
+from app.core.security import create_access_token, verify_password, get_password_hash
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.user import Token, UserResponse
+from app.schemas.user import Token, UserResponse, ChangeOwnPassword
 
 router = APIRouter()
 
@@ -40,4 +40,23 @@ def read_user_me(
     """
     Get current user.
     """
+    return current_user
+
+
+@router.post("/change-password", response_model=UserResponse)
+def change_own_password(
+    payload: ChangeOwnPassword,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+
+    current_user.password_hash = get_password_hash(payload.new_password)
+    current_user.force_password_change = False
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
     return current_user
