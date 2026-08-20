@@ -6,9 +6,9 @@ services:
     container_name: central-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: central_admin
-      POSTGRES_PASSWORD: central_password_123
-      POSTGRES_DB: central_db
+      POSTGRES_USER: ${CENTRAL_DB_USER}
+      POSTGRES_PASSWORD: ${CENTRAL_DB_PASSWORD}
+      POSTGRES_DB: ${CENTRAL_DB_NAME}
     volumes:
       - central_data:/var/lib/postgresql/data
 
@@ -22,8 +22,12 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - DATABASE_URL=postgresql://central_admin:central_password_123@central-db:5432/central_db
-      - YUMMY_DB_URL=postgresql://yummy_app:YummyDb2026!@localhost:5432/yummy
+      - DATABASE_URL=postgresql://${CENTRAL_DB_USER}:${CENTRAL_DB_PASSWORD}@central-db:5432/${CENTRAL_DB_NAME}
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_ORGANIZATION_NAME=${ADMIN_ORGANIZATION_NAME:-Empresa Demo}
+      - YUMMY_DB_URL=${YUMMY_DB_URL:-}
     depends_on:
       - central-db
 

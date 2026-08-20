@@ -9,37 +9,50 @@ from app.models.organization import Organization
 from app.core.security import get_password_hash
 import uuid
 
+DEFAULT_ADMIN_EMAIL = "admin@empresa.com"
+DEFAULT_ORGANIZATION_NAME = "Empresa Demo"
+
+
+def get_required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+
 def create_admin():
     db = SessionLocal()
-    
-    # Ver si ya existe
-    existing_user = db.query(User).filter(User.email == "admin@empresa.com").first()
-    if existing_user:
-        print("Admin user already exists! Forcing password reset to 'admin'")
-        existing_user.password_hash = get_password_hash("admin")
+    try:
+        admin_email = os.getenv("ADMIN_EMAIL", DEFAULT_ADMIN_EMAIL).strip().lower()
+        organization_name = os.getenv("ADMIN_ORGANIZATION_NAME", DEFAULT_ORGANIZATION_NAME).strip() or DEFAULT_ORGANIZATION_NAME
+
+        existing_user = db.query(User).filter(User.email == admin_email).first()
+        if existing_user:
+            print(f"Admin user {admin_email} already exists. Skipping reset.")
+            return
+
+        admin_password = get_required_env("ADMIN_PASSWORD")
+
+        org = db.query(Organization).first()
+        if not org:
+            org = Organization(id=uuid.uuid4(), name=organization_name)
+            db.add(org)
+            db.commit()
+            db.refresh(org)
+
+        user = User(
+            id=uuid.uuid4(),
+            email=admin_email,
+            password_hash=get_password_hash(admin_password),
+            role="ADMIN",
+            organization_id=org.id,
+            is_active=True
+        )
+        db.add(user)
         db.commit()
+        print(f"Admin user {admin_email} created successfully.")
+    finally:
         db.close()
-        return
-
-    # Crear organizacion
-    org = Organization(id=uuid.uuid4(), name="Empresa Demo")
-    db.add(org)
-    db.commit()
-    db.refresh(org)
-
-    # Crear usuario admin
-    user = User(
-        id=uuid.uuid4(),
-        email="admin@empresa.com",
-        password_hash=get_password_hash("admin"),
-        role="ADMIN",
-        organization_id=org.id,
-        is_active=True
-    )
-    db.add(user)
-    db.commit()
-    print("User admin@empresa.com created successfully with password: admin")
-    db.close()
 
 if __name__ == "__main__":
     create_admin()
