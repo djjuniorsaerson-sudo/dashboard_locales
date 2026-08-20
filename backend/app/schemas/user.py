@@ -29,6 +29,7 @@ class TokenPayload(BaseModel):
     org_id: Optional[str] = None
 
 
-class ChangeOwnPassword(BaseModel):
+class SetupOwnCredentials(BaseModel):
+    email: EmailStr
     current_password: str
     new_password: str

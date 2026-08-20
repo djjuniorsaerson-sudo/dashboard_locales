@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 
 export default function ForcePasswordChange() {
   const { token, user, updateUser, logout } = useAuth();
+  const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -12,6 +13,11 @@ export default function ForcePasswordChange() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+
+    if (!email.trim()) {
+      setErrorMsg('Tenés que definir un email de acceso.');
+      return;
+    }
 
     if (newPassword.length < 8) {
       setErrorMsg('La nueva contraseña debe tener al menos 8 caracteres.');
@@ -25,13 +31,14 @@ export default function ForcePasswordChange() {
 
     try {
       setSaving(true);
-      const res = await fetch('/api/v1/auth/change-password', {
+      const res = await fetch('/api/v1/auth/setup-credentials', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
+          email: email.trim().toLowerCase(),
           current_password: currentPassword,
           new_password: newPassword
         })
@@ -43,9 +50,6 @@ export default function ForcePasswordChange() {
       }
 
       updateUser(data);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
@@ -57,9 +61,9 @@ export default function ForcePasswordChange() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
       <div className="max-w-lg w-full bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-700">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-white mb-2">Cambiá tu contraseña</h2>
+          <h2 className="text-3xl font-bold text-white mb-2">Configurá tu acceso</h2>
           <p className="text-gray-400 text-sm">
-            {user?.email || 'Tu usuario'} debe definir una contraseña propia antes de ingresar al Panel.
+            Definí el email y la contraseña con los que vas a entrar al Panel Central.
           </p>
         </div>
 
@@ -70,6 +74,16 @@ export default function ForcePasswordChange() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Email de acceso</label>
+            <input
+              type="email"
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Contraseña actual</label>
             <input
@@ -105,7 +119,7 @@ export default function ForcePasswordChange() {
             disabled={saving}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-3 px-4 rounded-lg transition-colors shadow-lg shadow-blue-500/30"
           >
-            {saving ? 'Guardando...' : 'Guardar nueva contraseña'}
+            {saving ? 'Guardando...' : 'Guardar acceso'}
           </button>
         </form>
 
