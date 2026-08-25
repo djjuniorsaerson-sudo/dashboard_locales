@@ -263,8 +263,43 @@ def update_product_stock(
     current_user: User = Depends(deps.get_current_user),
 ):
     client = get_integration_client_for_installation(db, current_user, installation_id)
-    remote = deps.RemoteSession(client)
-    return ModulesExtractor.update_product_stock(remote, product_id, data.stock)
+    current_rows = client.execute_sql(
+        """
+        SELECT COALESCE(stock_quantity, 0)
+        FROM productos
+        WHERE id = ?
+        LIMIT 1
+        """,
+        [product_id],
+    )
+    rows = (current_rows or {}).get("rows", [])
+    if not rows:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    current_stock = int(float(rows[0][0] or 0))
+    target_stock = int(data.stock)
+    diff = target_stock - current_stock
+
+    if diff == 0:
+        return {"success": True, "new_stock": current_stock, "message": "Sin cambios"}
+
+    movement_type = "ingreso" if diff > 0 else "salida"
+    payload = client.request(
+        "POST",
+        "/api/integration/stock/movimientos",
+        payload={
+            "product_id": product_id,
+            "movement_type": movement_type,
+            "quantity": abs(diff),
+            "notes": "Ajuste rapido desde panel central",
+        },
+    )
+    return {
+        "success": True,
+        "previous_stock": current_stock,
+        "new_stock": target_stock,
+        "movement": payload.get("data") if isinstance(payload, dict) else payload,
+    }
 
 @router.get("/clients")
 def get_clients(db: Session = Depends(deps.get_yummy_db)):

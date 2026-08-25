@@ -62,6 +62,7 @@ export default function Dashboard({ setIsSyncing }) {
   const submitStockUpdate = async (e) => {
     e.preventDefault();
     const qty = parseInt(qtyToAdd, 10);
+    const currentStock = Number(selectedStockItem?.stock || 0);
     
     if (isNaN(qty) || qty === 0) {
       alert("Por favor ingresa un número válido (puede ser negativo para restar).");
@@ -80,7 +81,7 @@ export default function Dashboard({ setIsSyncing }) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ stock: selectedStockItem.stock + qty })
+        body: JSON.stringify({ stock: currentStock + qty })
       });
       
       if (response.ok) {
