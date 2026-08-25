@@ -255,8 +255,16 @@ def reorder_products(data: ReorderData, db: Session = Depends(deps.get_yummy_db)
     return ModulesExtractor.reorder_products(db, data.ordered_ids)
 
 @router.patch("/products/{product_id}/stock")
-def update_product_stock(product_id: int, data: StockData, db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.update_product_stock(db, product_id, data.stock)
+def update_product_stock(
+    product_id: int,
+    data: StockData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    remote = deps.RemoteSession(client)
+    return ModulesExtractor.update_product_stock(remote, product_id, data.stock)
 
 @router.get("/clients")
 def get_clients(db: Session = Depends(deps.get_yummy_db)):
@@ -466,21 +474,19 @@ def export_repartidores_xlsx(
     )
 
 @router.get("/dashboard/metrics")
-def get_dashboard_metrics(db: Session = Depends(deps.get_db)):
-    from app.models.yummy import YummyInstallation
-    from app.services.yummy_client import YummyIntegrationClient
-    
-    install = db.query(YummyInstallation).order_by(
-        YummyInstallation.last_health_check.desc().nullslast(),
-        YummyInstallation.created_at.desc(),
-    ).first()
+def get_dashboard_metrics(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
     if not install or not installation_is_online(install):
         return {
             "ventas_turno": 0, "pedidos_activos": 0, "pedidos_finalizados": 0,
             "product_sales": [], "stock_levels": []
         }
-        
-    client = YummyIntegrationClient(install.base_url, install.api_key)
+
+    client = get_integration_client_for_installation(db, current_user, installation_id)
     try:
         metrics = client.get_metrics() or {}
 

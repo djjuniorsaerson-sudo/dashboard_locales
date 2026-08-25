@@ -21,7 +21,8 @@ export default function Dashboard({ setIsSyncing }) {
     if (!isBackground) setLoading(true);
     if (setIsSyncing) setIsSyncing(true);
     try {
-      const res = await fetch(`/api/v1/data/dashboard/metrics`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/dashboard/metrics${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -44,7 +45,7 @@ export default function Dashboard({ setIsSyncing }) {
       clearInterval(interval);
       if (setIsSyncing) setIsSyncing(false);
     };
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const handleAddStock = (item) => {
     setSelectedStockItem(item);
@@ -69,7 +70,11 @@ export default function Dashboard({ setIsSyncing }) {
 
     setIsSavingStock(true);
     try {
-      const res = await fetch(`/api/v1/data/products/${selectedStockItem.id}/stock`, {
+      const endpoint = currentLocation?.id
+        ? `/api/v1/data/products/${selectedStockItem.id}/stock?installation_id=${encodeURIComponent(currentLocation.id)}`
+        : `/api/v1/data/products/${selectedStockItem.id}/stock`;
+
+      const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -78,7 +83,7 @@ export default function Dashboard({ setIsSyncing }) {
         body: JSON.stringify({ stock: selectedStockItem.stock + qty })
       });
       
-      if (res.ok) {
+      if (response.ok) {
         await fetchMetrics();
         closeStockModal();
       } else {

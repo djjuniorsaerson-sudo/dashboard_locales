@@ -136,6 +136,17 @@ export default function Repartidores() {
     return date.toLocaleString('es-AR', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
   };
 
+  const getTripDestination = (trip) => {
+    const destination = [
+      trip?.address,
+      trip?.customer_address,
+      trip?.destination_address,
+      trip?.delivery_address,
+      trip?.destino,
+    ].find((value) => String(value || '').trim());
+    return destination || 'Sin dirección registrada';
+  };
+
   const normalizeSearch = (value) => String(value || '').toLowerCase().trim();
   const filteredDeliveredOrders = deliveredOrders.filter((row) => {
     const searchTerm = normalizeSearch(deliveredSearch);
@@ -429,8 +440,15 @@ export default function Repartidores() {
                                     {trip.status}
                                 </span>
                             </div>
-                            <p className="text-xs text-gray-500">{trip.created_at}</p>
-                            {trip.address && <p className="text-sm text-gray-400 mt-1">📍 {trip.address}</p>}
+                            <p className="text-xs text-gray-500">{formatDateTime(trip.created_at)}</p>
+                            <p className="text-sm text-gray-300 mt-2 break-words">
+                              <span className="text-gray-500">Destino:</span> {getTripDestination(trip)}
+                            </p>
+                            {trip.notes && (
+                              <p className="text-xs text-gray-500 mt-1 break-words">
+                                Nota: {trip.notes}
+                              </p>
+                            )}
                         </div>
                         <div className="mt-3 md:mt-0 md:text-right">
                             <p className="text-emerald-400 font-bold text-lg">${trip.total_amount.toLocaleString()}</p>

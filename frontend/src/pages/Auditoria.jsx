@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Auditoria() {
+  const PAGE_SIZE = 10;
   const { token, currentLocation } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [moduleFilter, setModuleFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const isOffline = !!currentLocation && currentLocation.status !== 'ONLINE';
 
   const fetchLogs = async () => {
@@ -19,6 +21,7 @@ export default function Auditoria() {
       if (res.ok) {
         const data = await res.json();
         setLogs(data);
+        setCurrentPage(1);
       }
     } catch (e) {
       console.error(e);
@@ -30,6 +33,10 @@ export default function Auditoria() {
   useEffect(() => {
     fetchLogs();
   }, [token, currentLocation?.id]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, moduleFilter]);
 
   const uniqueModules = [...new Set(logs.map(l => l.module_name).filter(Boolean))];
 
@@ -43,6 +50,12 @@ export default function Auditoria() {
     
     return matchesSearch && matchesModule;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
+  const paginatedLogs = filteredLogs.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   if (loading) {
     return <div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>;
@@ -120,7 +133,7 @@ export default function Auditoria() {
         </div>
 
         <div className="divide-y divide-gray-700 md:hidden">
-          {filteredLogs.map(log => (
+          {paginatedLogs.map(log => (
             <div key={log.id} className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="text-gray-400 text-sm font-medium">{formatDateTime(log.created_at)}</div>
@@ -153,7 +166,7 @@ export default function Auditoria() {
               </div>
             </div>
           ))}
-          {filteredLogs.length === 0 && (
+          {paginatedLogs.length === 0 && (
             <div className="p-12 text-center text-gray-400">No se encontraron registros de auditoría.</div>
           )}
         </div>
@@ -161,7 +174,7 @@ export default function Auditoria() {
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <tbody className="divide-y divide-gray-700">
-              {filteredLogs.map(log => (
+              {paginatedLogs.map(log => (
                 <tr key={log.id} className="hover:bg-gray-750 transition-colors">
                   <td className="p-4 text-gray-400 text-sm whitespace-nowrap w-32 font-medium align-top">
                     {formatDateTime(log.created_at)}
@@ -194,7 +207,7 @@ export default function Auditoria() {
                   </td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && (
+              {paginatedLogs.length === 0 && (
                 <tr>
                   <td colSpan="5" className="p-12 text-center text-gray-400">
                     No se encontraron registros de auditoría.
@@ -204,6 +217,35 @@ export default function Auditoria() {
             </tbody>
           </table>
         </div>
+
+        {filteredLogs.length > PAGE_SIZE && (
+          <div className="flex flex-col gap-3 border-t border-gray-700 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-gray-400">
+              Mostrando {Math.min((currentPage - 1) * PAGE_SIZE + 1, filteredLogs.length)} - {Math.min(currentPage * PAGE_SIZE, filteredLogs.length)} de {filteredLogs.length} registros
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                className="rounded-lg border border-gray-600 bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <span className="text-sm font-semibold text-gray-300">
+                Página {currentPage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded-lg border border-gray-600 bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

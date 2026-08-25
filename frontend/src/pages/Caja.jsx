@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Caja() {
+  const REPORTS_PER_PAGE = 5;
   const { token, currentLocation } = useAuth();
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedDays, setExpandedDays] = useState({});
   const [employees, setEmployees] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Cash Management State
   const [showModal, setShowModal] = useState(false);
@@ -131,6 +133,7 @@ export default function Caja() {
       if (res.ok) {
         const data = await res.json();
         setReportes(data);
+        setCurrentPage(1);
         if (data.length > 0) {
           setExpandedDays({ [data[0].date]: true });
         }
@@ -287,6 +290,12 @@ export default function Caja() {
     return 'Turno';
   };
 
+  const totalPages = Math.max(1, Math.ceil(reportes.length / REPORTS_PER_PAGE));
+  const paginatedReportes = reportes.slice(
+    (currentPage - 1) * REPORTS_PER_PAGE,
+    currentPage * REPORTS_PER_PAGE
+  );
+
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-6 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
@@ -337,7 +346,7 @@ export default function Caja() {
         ) : reportes.length === 0 ? (
            <div className="p-8 text-center text-gray-500 bg-gray-800 rounded-xl">No hay datos de caja registrados recientes.</div>
         ) : (
-          reportes.map((dayReport) => (
+          paginatedReportes.map((dayReport) => (
             <div key={dayReport.date} className="bg-white/[0.03] rounded-3xl border border-white/10 overflow-hidden shadow-2xl backdrop-blur-xl">
               {/* Encabezado del Día */}
               {(() => {
@@ -536,6 +545,35 @@ export default function Caja() {
           ))
         )}
       </div>
+
+      {!loading && reportes.length > REPORTS_PER_PAGE && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <p className="text-sm text-gray-400">
+            Mostrando {Math.min((currentPage - 1) * REPORTS_PER_PAGE + 1, reportes.length)} - {Math.min(currentPage * REPORTS_PER_PAGE, reportes.length)} de {reportes.length} días
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+              className="rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <span className="text-sm font-semibold text-gray-300">
+              Página {currentPage} de {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+              className="rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal for Movements */}
       {showModal && (
