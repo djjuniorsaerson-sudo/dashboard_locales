@@ -23,7 +23,8 @@ export default function Caja() {
   const [submitting, setSubmitting] = useState(false);
   const isOffline = !!currentLocation && currentLocation.status !== 'ONLINE';
 
-  const buildCashClosureHtml = (summary) => {
+  const buildCashClosureHtml = (summaryPayload) => {
+    const summary = summaryPayload?.shift_summary || summaryPayload || {};
     const formatMoney = (amount) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(Number(amount || 0));
     const rows = Array.isArray(summary?.movements) ? summary.movements : [];
     const products = Array.isArray(summary?.products) ? summary.products : [];
@@ -110,8 +111,8 @@ export default function Caja() {
 </html>`;
   };
 
-  const openPrintWindow = (summary) => {
-    const html = buildCashClosureHtml(summary);
+  const openPrintWindow = (summaryPayload) => {
+    const html = buildCashClosureHtml(summaryPayload);
     const printWindow = window.open('', '_blank', 'width=1024,height=900');
     if (!printWindow) {
       alert('El navegador bloqueó la ventana de impresión.');
@@ -233,7 +234,29 @@ export default function Caja() {
         setShowModal(false);
         await fetchCaja();
         if (isCashClose) {
-          openPrintWindow(data);
+          const fallbackDate = localDateString;
+          const fallbackShift = formData.shift_name;
+          const fallbackClosedAt = data?.created_at || data?.closed_at || null;
+          let printData = data?.shift_summary ? data : null;
+
+          if (!printData) {
+            const params = new URLSearchParams({
+              date: fallbackDate,
+              shift: fallbackShift,
+            });
+            if (fallbackClosedAt) {
+              params.set('closed_at', fallbackClosedAt);
+            }
+            const summaryRes = await fetch(`/api/v1/data/caja/shift-summary?${params.toString()}&installation_id=${encodeURIComponent(currentLocation?.id || '')}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (summaryRes.ok) {
+              const summaryData = await summaryRes.json();
+              printData = summaryData?.shift_summary ? summaryData : { shift_summary: summaryData };
+            }
+          }
+
+          openPrintWindow(printData || data);
         }
       } else {
         const error = await res.json().catch(() => ({}));
