@@ -373,6 +373,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
               <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="flex-1 bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white text-sm outline-none focus:border-blue-500/50 transition-colors">
                 <option value="efectivo">Efectivo</option>
                 <option value="transferencia">Transferencia</option>
+                <option value="online">Online</option>
                 <option value="debito">Débito</option>
                 <option value="mixto">Mixto</option>
               </select>

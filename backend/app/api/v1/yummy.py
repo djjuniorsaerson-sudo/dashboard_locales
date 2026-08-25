@@ -424,6 +424,9 @@ def get_synced_catalog(
                 "price": float(product.price or 0),
                 "stock": float(product.stock or 0),
                 "active": product.is_active,
+                "toppings": (product.raw_payload or {}).get("toppings", []) or [],
+                "guarniciones": (product.raw_payload or {}).get("guarniciones", []) or [],
+                "extras": (product.raw_payload or {}).get("extras", []) or [],
             }
             for product in products
         ],
