@@ -17,6 +17,11 @@ export default function Dashboard({ setIsSyncing }) {
   const [qtyToAdd, setQtyToAdd] = useState('');
   const [isSavingStock, setIsSavingStock] = useState(false);
 
+  const formatStockValue = (value) => {
+    const numeric = Number(value || 0);
+    return Number.isInteger(numeric) ? numeric.toString() : numeric.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  };
+
   const fetchMetrics = async (isBackground = false) => {
     if (!isBackground) setLoading(true);
     if (setIsSyncing) setIsSyncing(true);
@@ -61,7 +66,7 @@ export default function Dashboard({ setIsSyncing }) {
 
   const submitStockUpdate = async (e) => {
     e.preventDefault();
-    const qty = parseInt(qtyToAdd, 10);
+    const qty = parseFloat(qtyToAdd);
     const currentStock = Number(selectedStockItem?.stock || 0);
     
     if (isNaN(qty) || qty === 0) {
@@ -241,7 +246,7 @@ export default function Dashboard({ setIsSyncing }) {
                         >
                           <span className={`font-semibold truncate pr-3 ${isLowStock ? 'text-red-200' : 'text-gray-200'}`} title={item.name}>{item.name}</span>
                           <span className={`px-3 py-1.5 rounded-lg font-black text-sm shadow-inner ${isLowStock ? 'bg-red-500/20 text-red-400 shadow-red-500/30 animate-pulse' : 'bg-gray-900/80 text-emerald-400 shadow-black/50'}`}>
-                            {item.stock}
+                            {formatStockValue(item.stock)}
                           </span>
                         </motion.div>
                       );
@@ -280,7 +285,7 @@ export default function Dashboard({ setIsSyncing }) {
                 <p className="text-lg font-bold text-white">{selectedStockItem.name}</p>
                 <div className="mt-2 inline-block bg-gray-900 rounded-lg px-4 py-2 border border-gray-700">
                   <span className="text-gray-400 text-sm mr-2">Stock Actual:</span>
-                  <span className="text-emerald-400 font-black text-lg">{selectedStockItem.stock}</span>
+                  <span className="text-emerald-400 font-black text-lg">{formatStockValue(selectedStockItem.stock)}</span>
                 </div>
               </div>
 
@@ -289,14 +294,15 @@ export default function Dashboard({ setIsSyncing }) {
                 <input 
                   type="number" 
                   required
+                  step="0.5"
                   value={qtyToAdd}
                   onChange={(e) => setQtyToAdd(e.target.value)}
                   className="w-full text-center text-xl font-bold bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
-                  placeholder="Ej: 10 o -5"
+                  placeholder="Ej: 10, 0.5 o -0.5"
                   autoFocus
                 />
                 <p className="text-xs text-gray-500 text-center mt-2">
-                  Usa números negativos (ej. -5) para restar unidades.
+                  Usa números negativos (ej. -0.5) para restar unidades.
                 </p>
               </div>
 

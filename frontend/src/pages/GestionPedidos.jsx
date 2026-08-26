@@ -111,10 +111,55 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
     }
   };
 
-  const filteredOrders = Array.isArray(orders) ? orders.filter(o => 
-    (o.id && o.id.toString().includes(search)) || 
-    (o.client_name && o.client_name.toLowerCase().includes(search.toLowerCase()))
-  ) : [];
+  const handleMarkPaid = async (order) => {
+    if (isOffline) {
+      alert('El local está OFFLINE. No podés marcar pagos hasta que vuelva a estar ONLINE.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/v1/data/pedidos/${order.id}?installation_id=${encodeURIComponent(currentLocation?.id || '')}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          payment_method: order.payment_method || 'transferencia',
+          payment_detail: 'transferencia confirmada'
+        })
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || 'No se pudo marcar como pagado');
+      }
+
+      const updated = await res.json();
+      const updatedOrder = updated?.data || updated;
+      setOrders((prev) => prev.map((entry) => (
+        Number(entry.id) === Number(order.id)
+          ? { ...entry, ...updatedOrder, is_paid: true, payment_detail: 'transferencia confirmada' }
+          : entry
+      )));
+    } catch (error) {
+      console.error('Error marking order as paid', error);
+      alert(error.message || 'No se pudo marcar como pagado');
+    }
+  };
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredOrders = Array.isArray(orders) ? orders.filter((o) => {
+    if (!normalizedSearch) return true;
+    return (
+      (o.id && o.id.toString().includes(normalizedSearch)) ||
+      String(o.client_name || '').toLowerCase().includes(normalizedSearch) ||
+      String(o.customer_name || '').toLowerCase().includes(normalizedSearch) ||
+      String(o.customer_phone || '').toLowerCase().includes(normalizedSearch) ||
+      String(o.address || '').toLowerCase().includes(normalizedSearch) ||
+      String(o.customer_address || '').toLowerCase().includes(normalizedSearch)
+    );
+  }) : [];
 
   const formatMoney = (value) => `$${Number(value || 0).toLocaleString('es-AR')}`;
 
@@ -126,6 +171,11 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
 
   const getItemName = (item) =>
     String(item?.product_name || item?.name || '').trim() || 'Producto';
+
+  const canMarkPaid = (order) => {
+    const method = String(order?.payment_method || '').trim().toLowerCase();
+    return ['transferencia', 'online', 'debito', 'mixto'].includes(method) && !order?.is_paid;
+  };
 
   return (
     <div className="flex flex-col h-full bg-white/[0.03] rounded-3xl border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl">
@@ -214,6 +264,11 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                         <CreditCard className="w-3.5 h-3.5 mr-1" />
                         {order.payment_method || 'sin definir'}
                       </div>
+                      {order?.is_paid && (
+                        <div className="mt-2 inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-300">
+                          Pagado
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -274,6 +329,16 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                   </div>
 
                   <div className="p-4 bg-black/10 flex gap-3 border-t border-white/10">
+                    {canMarkPaid(order) && (
+                      <button
+                        onClick={() => handleMarkPaid(order)}
+                        disabled={isOffline}
+                        className={`flex-1 flex items-center justify-center px-4 py-3 border rounded-2xl font-semibold transition-all ${isOffline ? 'bg-emerald-900/20 text-emerald-300/60 border-emerald-500/10 cursor-not-allowed opacity-60' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-300'}`}
+                      >
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Pagado
+                      </button>
+                    )}
                     <button 
                       onClick={() => handleCancel(order.id)}
                       disabled={isOffline}

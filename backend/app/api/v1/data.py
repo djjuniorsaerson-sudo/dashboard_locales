@@ -40,7 +40,7 @@ class ProductData(BaseModel):
     stock: int
 
 class StockData(BaseModel):
-    stock: int
+    stock: float
 
 class NovedadData(BaseModel):
     event_type: str
@@ -70,6 +70,14 @@ class CashShiftCloseData(BaseModel):
     shift: str = "general"
     movement_date: Optional[str] = None
     generate_report: bool = True
+
+
+class CashShiftDeleteData(BaseModel):
+    date: str
+    shift: str = "general"
+    start_at: str
+    end_at: Optional[str] = None
+    closed_at: Optional[str] = None
 
 
 EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
@@ -276,11 +284,11 @@ def update_product_stock(
     if not rows:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    current_stock = int(float(rows[0][0] or 0))
-    target_stock = int(data.stock)
+    current_stock = float(rows[0][0] or 0)
+    target_stock = float(data.stock)
     diff = target_stock - current_stock
 
-    if diff == 0:
+    if abs(diff) < 0.0001:
         return {"success": True, "new_stock": current_stock, "message": "Sin cambios"}
 
     movement_type = "ingreso" if diff > 0 else "salida"
@@ -302,20 +310,70 @@ def update_product_stock(
     }
 
 @router.get("/clients")
-def get_clients(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_clients(db)
+def get_clients(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("GET", "/api/clientes?page=1&page_size=5000")
+    if isinstance(payload, dict):
+        return ((payload.get("data") or {}).get("items")) or payload.get("items") or []
+    return payload if isinstance(payload, list) else []
 
 @router.post("/clients")
-def create_client(data: ClientData, db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.create_client(db, data.dict())
+def create_client(
+    data: ClientData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("POST", "/api/clientes", payload=data.model_dump(exclude_none=True))
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
 
 @router.put("/clients/{client_id}")
-def update_client(client_id: int, data: ClientData, db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.update_client(db, client_id, data.dict())
+def update_client(
+    client_id: int,
+    data: ClientData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("PUT", f"/api/clientes/{client_id}", payload=data.model_dump(exclude_none=True))
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
 
 @router.delete("/clients/{client_id}")
-def delete_client(client_id: int, db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.delete_client(db, client_id)
+def delete_client(
+    client_id: int,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("DELETE", f"/api/clientes/{client_id}")
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+@router.post("/clients/{client_id}/reset-monthly")
+def reset_client_monthly_counts(
+    client_id: int,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("POST", f"/api/clientes/{client_id}/reset-monthly")
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
 
 @router.get("/employees")
 def get_employees(
@@ -380,11 +438,29 @@ def get_empleado_novedades(
     return snapshot.get("novedades", [])
 
 @router.post("/employees/{employee_id}/novedad")
-def add_empleado_novedad(employee_id: int, data: NovedadData):
-    client = get_integration_client()
-    if not client:
-        raise HTTPException(status_code=503, detail="Yummy is not ONLINE")
+def add_empleado_novedad(
+    employee_id: int,
+    data: NovedadData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
     payload = client.request("POST", f"/api/integration/employees/{employee_id}/novedades", payload=data.dict())
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+@router.delete("/employees/novedades/{event_id}")
+def delete_empleado_novedad(
+    event_id: int,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("DELETE", f"/api/integration/employee-events/{event_id}")
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
@@ -466,6 +542,40 @@ def get_client_by_phone(phone: str, db: Session = Depends(deps.get_yummy_db)):
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     return client
 
+
+@router.get("/clients/by-phone/{phone}")
+def get_clients_by_phone(phone: str, db: Session = Depends(deps.get_yummy_db)):
+    clients = ModulesExtractor.search_clients_by_phone(db, phone)
+    if not clients:
+        return {
+            "matches": [],
+            "addresses": [],
+        }
+
+    addresses = []
+    seen = set()
+    for client in clients:
+        raw_address = str(client.get("address") or "").strip()
+        if not raw_address:
+            continue
+        key = raw_address.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        addresses.append(
+            {
+                "client_id": client.get("id"),
+                "address": raw_address,
+                "name": client.get("name") or "",
+                "notes": client.get("notes") or "",
+            }
+        )
+
+    return {
+        "matches": clients,
+        "addresses": addresses,
+    }
+
 @router.get("/repartidores/history")
 def get_global_repartidor_history(db: Session = Depends(deps.get_yummy_db)):
     return ModulesExtractor.get_global_repartidor_history(db)
@@ -541,28 +651,14 @@ def get_dashboard_metrics(
                 "stock": float(row[2] or 0),
             })
 
-        product_sales_rows = client.execute_sql(
-            """
-            SELECT
-                dp.product_name,
-                COALESCE(SUM(dp.quantity), 0) AS sold
-            FROM ventas v
-            JOIN detalle_pedidos dp ON dp.order_id = v.order_id
-            WHERE DATE(v.created_at) = CURRENT_DATE
-            GROUP BY dp.product_name
-            ORDER BY sold DESC, dp.product_name ASC
-            LIMIT 5
-            """,
-            [],
-        )
         product_sales = []
-        for row in (product_sales_rows or {}).get("rows", []):
-            sold = float(row[1] or 0)
-            product_sales.append({
-                "name": row[0] or "",
-                "sold_turno": sold,
-                "sold_dia": sold,
-            })
+        if isinstance(metrics.get("product_sales"), list):
+            for row in metrics.get("product_sales") or []:
+                product_sales.append({
+                    "name": row.get("name") or "",
+                    "sold_turno": float(row.get("sold_turno") or 0),
+                    "sold_dia": float(row.get("sold_dia") or 0),
+                })
 
         return {
             "ventas_turno": float(metrics.get("ventas_turno") or 0),
@@ -788,35 +884,143 @@ def get_cash_shift_summary(
         return payload["data"]
     return payload
 
+
+@router.post("/caja/shift-delete")
+def delete_cash_shift(
+    data: CashShiftDeleteData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("POST", "/api/integration/caja/shift/delete", payload=data.model_dump(exclude_none=True))
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
 class UsuarioData(BaseModel):
     username: str
     password: str = ""
     role: str = "cajero"
     active: bool = True
 
+MANAGED_USER_VIEWS = [
+    "inicio",
+    "dashboard",
+    "caja",
+    "productos",
+    "clientes",
+    "empleados",
+    "repartidores",
+    "entregadosDelivery",
+    "auditoria",
+    "reportes",
+    "backup",
+    "licencia",
+    "manager",
+    "comandero",
+]
+
+
+def default_allowed_views_for_role(role: str) -> list[str]:
+    normalized = str(role or "").strip().lower()
+    role_map = {
+        "admin": list(MANAGED_USER_VIEWS),
+        "encargado": list(MANAGED_USER_VIEWS),
+        "cajero": ["inicio", "caja", "clientes"],
+    }
+    return role_map.get(normalized, list(MANAGED_USER_VIEWS))
+
+
 @router.get("/usuarios")
-def get_usuarios(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_usuarios(db)
+def get_usuarios(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("GET", "/api/auth/users")
+    if isinstance(payload, dict):
+        return payload.get("data") or []
+    return payload if isinstance(payload, list) else []
+
 
 @router.post("/usuarios")
-def create_usuario(data: UsuarioData, db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.create_usuario(db, data.dict())
+def create_usuario(
+    data: UsuarioData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request(
+        "POST",
+        "/api/auth/users",
+        payload={
+            "username": data.username,
+            "password": data.password,
+            "active": data.active,
+            "allowed_views": default_allowed_views_for_role(data.role),
+        },
+    )
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
 
 @router.put("/usuarios/{user_id}/password")
-def update_usuario_password(user_id: int, data: dict, db: Session = Depends(deps.get_yummy_db)):
-    password = data.get("password")
+def update_usuario_password(
+    user_id: int,
+    data: dict,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    password = str(data.get("password") or "").strip()
     if not password:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Password is required")
-    return ModulesExtractor.update_usuario_password(db, user_id, password)
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request(
+        "PUT",
+        f"/api/auth/users/{user_id}/password",
+        payload={"password": password},
+    )
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
 
 @router.put("/usuarios/{user_id}/status")
-def toggle_usuario_status(user_id: int, data: dict, db: Session = Depends(deps.get_yummy_db)):
+def toggle_usuario_status(
+    user_id: int,
+    data: dict,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
     active = data.get("active")
     if active is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Active status is required")
-    return ModulesExtractor.toggle_usuario_status(db, user_id, bool(active))
+
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    users_payload = client.request("GET", "/api/auth/users")
+    users = users_payload.get("data") if isinstance(users_payload, dict) else users_payload
+    target = next((item for item in (users or []) if int(item.get("id") or 0) == user_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    payload = client.request(
+        "PUT",
+        f"/api/auth/users/{user_id}",
+        payload={
+            "username": target.get("username") or "",
+            "active": bool(active),
+            "allowed_views": target.get("allowed_views") or list(MANAGED_USER_VIEWS),
+        },
+    )
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
 
 @router.get("/audit-logs")
 def get_audit_logs(

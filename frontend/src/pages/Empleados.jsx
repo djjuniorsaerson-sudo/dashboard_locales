@@ -6,6 +6,8 @@ export default function Empleados() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [novedades, setNovedades] = useState([]);
+  const [novedadesPage, setNovedadesPage] = useState(1);
+  const NOVEDADES_PER_PAGE = 10;
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,6 +54,7 @@ export default function Empleados() {
       if (res.ok) {
         const data = await res.json();
         setNovedades(data);
+        setNovedadesPage(1);
       }
     } catch (e) {
       console.error("Error fetching novedades", e);
@@ -193,9 +196,45 @@ export default function Empleados() {
     }
   };
 
+  const handleDeleteNovedad = async (nov) => {
+    if (!currentLocation?.id) {
+      alert('No hay un local activo seleccionado.');
+      return;
+    }
+    const confirmed = window.confirm(`¿Borrar ${nov.event_type?.toLowerCase() || 'la novedad'} de ${nov.employee_name}?`);
+    if (!confirmed) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/v1/data/employees/novedades/${nov.id}?installation_id=${encodeURIComponent(currentLocation.id)}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || 'No se pudo eliminar la novedad');
+      }
+      await fetchEmployees();
+      await fetchNovedades();
+    } catch (error) {
+      console.error("Error deleting novedad", error);
+      alert(error.message || "No se pudo eliminar la novedad");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const totalAPagar = employees.reduce((acc, emp) => {
     return (emp.final_salary > 0) ? acc + emp.final_salary : acc;
   }, 0);
+  const totalNovedadesPages = Math.max(1, Math.ceil(novedades.length / NOVEDADES_PER_PAGE));
+  const paginatedNovedades = novedades.slice(
+    (novedadesPage - 1) * NOVEDADES_PER_PAGE,
+    novedadesPage * NOVEDADES_PER_PAGE
+  );
 
   return (
     <div className="space-y-6">
@@ -359,14 +398,26 @@ export default function Empleados() {
           <h3 className="font-bold text-white">Historial de Adelantos y Faltas</h3>
         </div>
         <div className="p-4 overflow-y-auto flex-1 space-y-3 bg-gray-800">
-          {novedades.map((nov) => (
+          {paginatedNovedades.map((nov) => (
             <div key={nov.id} className="bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-700 hover:bg-gray-800 transition-colors">
                 <div>
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="font-bold text-white text-sm">{nov.employee_name}</div>
-                        <div className={`border text-[10px] font-bold px-2 py-0.5 rounded uppercase ${nov.event_type.toLowerCase() === 'falta' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'}`}>
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-bold text-white text-sm">{nov.employee_name}</div>
+                          <div className={`border text-[10px] font-bold px-2 py-0.5 rounded uppercase ${nov.event_type.toLowerCase() === 'falta' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'}`}>
                             {nov.event_type}
+                          </div>
                         </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteNovedad(nov)}
+                        disabled={isSaving}
+                        className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        Borrar
+                      </button>
                     </div>
                     <div className="text-xs text-gray-400 mb-1">Monto Descontado: <span className="font-bold text-red-400">-${nov.amount.toLocaleString()}</span></div>
                     <div className="text-xs text-gray-400 mb-1">Motivo: <span className="italic text-gray-300">{nov.notes}</span></div>
@@ -378,6 +429,34 @@ export default function Empleados() {
             <p className="text-center text-gray-500 py-10 text-sm">No hay adelantos ni faltas registrados.</p>
           )}
         </div>
+        {novedades.length > 0 && (
+          <div className="flex items-center justify-between gap-3 border-t border-gray-700 bg-gray-900 px-4 py-3">
+            <p className="text-sm text-gray-400">
+              Mostrando {Math.min((novedadesPage - 1) * NOVEDADES_PER_PAGE + 1, novedades.length)} - {Math.min(novedadesPage * NOVEDADES_PER_PAGE, novedades.length)} de {novedades.length} vales/faltas
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setNovedadesPage((page) => Math.max(1, page - 1))}
+                disabled={novedadesPage === 1}
+                className="rounded-lg border border-white/10 bg-gray-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-gray-700 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <span className="text-sm font-semibold text-gray-300">
+                Página {novedadesPage} de {totalNovedadesPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setNovedadesPage((page) => Math.min(totalNovedadesPages, page + 1))}
+                disabled={novedadesPage === totalNovedadesPages}
+                className="rounded-lg border border-white/10 bg-gray-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-gray-700 disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal CRUD */}

@@ -125,6 +125,70 @@ export default function Caja() {
     window.setTimeout(() => printWindow.print(), 300);
   };
 
+  const reprintShift = async (dayReport, shift) => {
+    try {
+      const params = new URLSearchParams({
+        date: dayReport.date,
+        shift: shift.shift_label || shift.shift_id || 'general',
+      });
+      if (shift.end_time) {
+        params.set('closed_at', shift.end_time);
+      }
+      if (currentLocation?.id) {
+        params.set('installation_id', currentLocation.id);
+      }
+      const res = await fetch(`/api/v1/data/caja/shift-summary?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        alert(error.detail || 'No se pudo reimprimir ese cierre.');
+        return;
+      }
+      const summaryData = await res.json();
+      const payload = summaryData?.shift_summary ? summaryData : { shift_summary: summaryData };
+      openPrintWindow(payload);
+    } catch (error) {
+      console.error('Error reprinting shift', error);
+      alert('Error al reimprimir el cierre.');
+    }
+  };
+
+  const deleteShift = async (dayReport, shift) => {
+    const shiftName = formatShiftLabel(shift);
+    const confirmed = window.confirm(`¿Eliminar ${shiftName} del ${formatDateLabel(dayReport.date)}? Esta acción borra la apertura/cierre y movimientos de caja de ese turno.`);
+    if (!confirmed) return;
+
+    try {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/caja/shift-delete${installationQuery}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          date: dayReport.date,
+          shift: shift.shift_label || shift.shift_id || 'general',
+          start_at: shift.start_time,
+          end_at: shift.end_time || null,
+          closed_at: shift.end_time || null,
+        })
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        alert(error.detail || 'No se pudo eliminar el turno.');
+        return;
+      }
+
+      await fetchCaja();
+    } catch (error) {
+      console.error('Error deleting shift', error);
+      alert('Error al eliminar el turno.');
+    }
+  };
+
   const fetchCaja = async () => {
     try {
       const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
@@ -531,6 +595,25 @@ export default function Caja() {
                               <span className="font-bold text-red-400">-{formatMoney(shift.salidas)}</span>
                             </div>
                           </div>
+                        </div>
+
+                        <div className="mb-4 flex flex-wrap gap-2">
+                          {shift.end_time && (
+                            <button
+                              type="button"
+                              onClick={() => reprintShift(dayReport, shift)}
+                              className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-300 transition hover:bg-blue-500/20"
+                            >
+                              Reimprimir cierre
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => deleteShift(dayReport, shift)}
+                            className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/20"
+                          >
+                            Borrar turno
+                          </button>
                         </div>
 
                         {/* Movimientos del turno */}

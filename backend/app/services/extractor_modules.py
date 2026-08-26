@@ -699,6 +699,26 @@ class ModulesExtractor:
         return None
 
     @staticmethod
+    def search_clients_by_phone(db: Session, phone: str):
+        query = text("""
+            SELECT id, name, phone, address, notes
+            FROM clientes
+            WHERE phone = ?
+            ORDER BY id DESC
+        """)
+        rows = db.execute(query, [phone]).fetchall()
+        return [
+            {
+                "id": row[0],
+                "name": row[1],
+                "phone": row[2],
+                "address": row[3],
+                "notes": row[4],
+            }
+            for row in rows
+        ]
+
+    @staticmethod
     def get_repartidor_history(db: Session, repartidor_id: int):
         query = text("""
             SELECT id, pedido_id, status, total_amount, address, notes, created_at, closed_at

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Clientes() {
-  const { token } = useAuth();
+  const { token, currentLocation } = useAuth();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,11 +19,12 @@ export default function Clientes() {
 
   useEffect(() => {
     fetchClients();
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const fetchClients = async () => {
     try {
-      const res = await fetch(`/api/v1/data/clients`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/clients${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -64,9 +65,10 @@ export default function Clientes() {
     setIsSaving(true);
     
     try {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
       const url = editingClient 
-        ? `/api/v1/data/clients/${editingClient.id}`
-        : `/api/v1/data/clients`;
+        ? `/api/v1/data/clients/${editingClient.id}${installationQuery}`
+        : `/api/v1/data/clients${installationQuery}`;
         
       const method = editingClient ? 'PUT' : 'POST';
 
@@ -99,7 +101,8 @@ export default function Clientes() {
     }
 
     try {
-      const res = await fetch(`/api/v1/data/clients/${clientId}`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/clients/${clientId}${installationQuery}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -112,6 +115,29 @@ export default function Clientes() {
     } catch (e) {
       console.error("Error", e);
       alert("Error de red al eliminar.");
+    }
+  };
+
+  const handleResetMonthly = async (clientId) => {
+    if (!window.confirm("¿Reiniciar el contador mensual de compras de este cliente y sus domicilios?")) {
+      return;
+    }
+
+    try {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/clients/${clientId}/reset-monthly${installationQuery}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        await fetchClients();
+      } else {
+        alert("Error al reiniciar el contador mensual.");
+      }
+    } catch (e) {
+      console.error("Error", e);
+      alert("Error de red al reiniciar.");
     }
   };
 
@@ -180,7 +206,7 @@ export default function Clientes() {
                       <div className="text-sm text-gray-400 mt-1">{c.phone || '-'}</div>
                     </div>
                     <div className="shrink-0 rounded-lg bg-emerald-500/10 px-3 py-2 text-right">
-                      <div className="text-[10px] uppercase tracking-wide text-gray-500">Compras</div>
+                      <div className="text-[10px] uppercase tracking-wide text-gray-500">Compras totales</div>
                       <div className="text-emerald-400 font-bold">{c.purchase_count || 0}</div>
                     </div>
                   </div>
@@ -188,6 +214,24 @@ export default function Clientes() {
                     <div className="text-[10px] uppercase tracking-wide text-gray-500">Dirección principal</div>
                     <div className="text-sm text-gray-200 mt-1 break-words">{c.address || '-'}</div>
                   </div>
+                  <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wide text-gray-500">Compras del mes</div>
+                    <div className="text-blue-300 font-bold">{c.monthly_purchase_count || 0}</div>
+                  </div>
+                  {!!c.addresses?.length && (
+                    <div className="bg-gray-900/60 rounded-lg p-3 space-y-2">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-500">Domicilios</div>
+                      {c.addresses.map((addressRow) => (
+                        <div key={addressRow.id || addressRow.address} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                          <div className="text-sm text-gray-200 break-words">{addressRow.address}</div>
+                          <div className="mt-1 flex gap-3 text-xs">
+                            <span className="text-emerald-400">Total: {addressRow.purchase_count || 0}</span>
+                            <span className="text-blue-300">Mes: {addressRow.monthly_purchase_count || 0}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex gap-3">
                     <button 
                       onClick={() => openModal(c)}
@@ -195,6 +239,14 @@ export default function Clientes() {
                     >
                       Editar
                     </button>
+                    <button 
+                      onClick={() => handleResetMonthly(c.id)}
+                      className="flex-1 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-sm font-medium text-amber-300"
+                    >
+                      Reiniciar mes
+                    </button>
+                  </div>
+                  <div className="flex gap-3">
                     <button 
                       onClick={() => handleDelete(c.id)}
                       className="flex-1 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm font-medium text-red-400"
@@ -217,6 +269,7 @@ export default function Clientes() {
                       <th className="px-6 py-4">Teléfono</th>
                       <th className="px-6 py-4">Dirección principal</th>
                       <th className="px-6 py-4 text-center">Compras</th>
+                      <th className="px-6 py-4 text-center">Mes</th>
                       <th className="px-6 py-4 text-center">Acciones</th>
                     </tr>
                   </thead>
@@ -227,12 +280,19 @@ export default function Clientes() {
                         <td className="px-6 py-4">{c.phone || '-'}</td>
                         <td className="px-6 py-4">{c.address || '-'}</td>
                         <td className="px-6 py-4 font-bold text-emerald-400 text-center">{c.purchase_count || 0}</td>
+                        <td className="px-6 py-4 font-bold text-blue-300 text-center">{c.monthly_purchase_count || 0}</td>
                         <td className="px-6 py-4 text-center">
                           <button 
                             onClick={() => openModal(c)}
                             className="inline-block text-blue-400 hover:text-blue-300 font-medium mr-3 transition-colors"
                           >
                             Editar
+                          </button>
+                          <button 
+                            onClick={() => handleResetMonthly(c.id)}
+                            className="inline-block text-amber-300 hover:text-amber-200 font-medium mr-3 transition-colors"
+                          >
+                            Reiniciar mes
                           </button>
                           <button 
                             onClick={() => handleDelete(c.id)}
@@ -245,7 +305,7 @@ export default function Clientes() {
                     ))}
                     {filteredClients.length === 0 && (
                       <tr>
-                        <td colSpan="5" className="px-6 py-8 text-center text-gray-500">No se encontraron clientes.</td>
+                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">No se encontraron clientes.</td>
                       </tr>
                     )}
                   </tbody>

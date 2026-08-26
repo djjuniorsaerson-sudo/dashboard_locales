@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, ShoppingBag, User, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, ShoppingBag, User, CheckCircle2, Pencil } from 'lucide-react';
+
+const EMPTY_PAYMENT_BREAKDOWN = {
+  efectivo: '',
+  transferencia: '',
+  debito: '',
+  online: '',
+};
 
 export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentView }) {
   const { token, currentLocation } = useAuth();
@@ -13,6 +20,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const [address, setAddress] = useState('');
   const [orderType, setOrderType] = useState('Delivery');
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
+  const [paymentBreakdown, setPaymentBreakdown] = useState(EMPTY_PAYMENT_BREAKDOWN);
+  const [clientMatches, setClientMatches] = useState([]);
+  const [availableAddresses, setAvailableAddresses] = useState([]);
 
   // Cart
   const [cart, setCart] = useState([]);
@@ -41,6 +51,13 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       setAddress(orderToEdit.address || '');
       setOrderType(orderToEdit.order_type || 'Delivery');
       setPaymentMethod(orderToEdit.payment_method || 'efectivo');
+      setPaymentBreakdown({
+        efectivo: String(orderToEdit.payment_breakdown?.efectivo ?? ''),
+        transferencia: String(orderToEdit.payment_breakdown?.transferencia ?? ''),
+        debito: String(orderToEdit.payment_breakdown?.debito ?? ''),
+        online: String(orderToEdit.payment_breakdown?.online ?? ''),
+      });
+      setAvailableAddresses(orderToEdit.address ? [{ client_id: orderToEdit.customer_id, address: orderToEdit.address }] : []);
       if (orderToEdit.items) {
         setCart(orderToEdit.items.map((item, idx) => ({
           ...item,
@@ -53,27 +70,52 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       }
     } else {
       setCart([]); setPhone(''); setName(''); setAddress('');
+      setPaymentBreakdown(EMPTY_PAYMENT_BREAKDOWN);
+      setClientMatches([]);
+      setAvailableAddresses([]);
+      setEditingCartItemKey(null);
     }
   }, [orderToEdit]);
 
   const handlePhoneBlur = async () => {
     if (!phone) return;
     try {
-      const res = await fetch(`/api/v1/data/client/${phone}`, {
+      const res = await fetch(`/api/v1/data/clients/by-phone/${phone}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setName(data.name || '');
-        setAddress(data.address || '');
+        const matches = Array.isArray(data.matches) ? data.matches : [];
+        const addresses = Array.isArray(data.addresses) ? data.addresses : [];
+        setClientMatches(matches);
+        setAvailableAddresses(addresses);
+
+        if (matches.length > 0) {
+          const preferredName = matches.find((item) => String(item.name || '').trim())?.name || '';
+          setName(preferredName);
+        }
+
+        if (addresses.length === 1) {
+          setAddress(addresses[0].address || '');
+        } else if (addresses.length > 1) {
+          const stillExists = addresses.some((item) => item.address === address);
+          if (!stillExists) {
+            setAddress(addresses[0].address || '');
+          }
+        } else if (matches.length > 0) {
+          setAddress(matches[0].address || '');
+        }
       }
     } catch (e) {
       console.log("Cliente no encontrado, se creará uno nuevo");
+      setClientMatches([]);
+      setAvailableAddresses([]);
     }
   };
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productAddons, setProductAddons] = useState({ toppings: [], extras: [], guarniciones: [] });
+  const [editingCartItemKey, setEditingCartItemKey] = useState(null);
 
   const openCustomizer = (product) => {
     const hasAddons = (product.toppings && product.toppings.length > 0) || 
@@ -83,9 +125,25 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     if (hasAddons) {
       setSelectedProduct(product);
       setProductAddons({ toppings: [], extras: [], guarniciones: [] });
+      setEditingCartItemKey(null);
     } else {
       addToCart(product, [], [], []);
     }
+  };
+
+  const editCartItem = (item) => {
+    const product = products.find((entry) => Number(entry.id) === Number(item.product_id));
+    if (!product) {
+      setErrorMsg('No encontré el producto original para editar este ítem.');
+      return;
+    }
+    setSelectedProduct(product);
+    setProductAddons({
+      toppings: Array.isArray(item.toppings) ? item.toppings.map((entry) => ({ ...entry, qty: entry.qty || entry.quantity || 1 })) : [],
+      extras: Array.isArray(item.extras) ? item.extras.map((entry) => ({ ...entry, qty: entry.qty || entry.quantity || 1 })) : [],
+      guarniciones: Array.isArray(item.guarniciones) ? item.guarniciones.map((entry) => ({ ...entry, qty: entry.qty || entry.quantity || 1 })) : [],
+    });
+    setEditingCartItemKey(item.customKey);
   };
 
   const handleAddonToggle = (category, addon) => {
@@ -121,7 +179,50 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   };
 
   const confirmCustomProduct = () => {
-    addToCart(selectedProduct, productAddons.toppings, productAddons.extras, productAddons.guarniciones);
+    if (editingCartItemKey) {
+      const previousItem = cart.find((item) => item.customKey === editingCartItemKey);
+      if (!previousItem) {
+        setEditingCartItemKey(null);
+        setSelectedProduct(null);
+        return;
+      }
+
+      const addonsTotal = calculateAddonsPrice(productAddons.toppings, productAddons.extras, productAddons.guarniciones);
+      const unitPrice = parseFloat(selectedProduct.price) + addonsTotal;
+      const newCustomKey = generateCustomKey(selectedProduct.id, productAddons.toppings, productAddons.extras, productAddons.guarniciones);
+
+      setCart((prevCart) => {
+        const remainingItems = prevCart.filter((item) => item.customKey !== editingCartItemKey);
+        const mergedIndex = remainingItems.findIndex((item) => item.customKey === newCustomKey);
+
+        if (mergedIndex >= 0) {
+          const nextCart = [...remainingItems];
+          nextCart[mergedIndex] = {
+            ...nextCart[mergedIndex],
+            quantity: nextCart[mergedIndex].quantity + previousItem.quantity,
+          };
+          return nextCart;
+        }
+
+        return [
+          ...remainingItems,
+          {
+            ...previousItem,
+            product_id: selectedProduct.id,
+            product_name: selectedProduct.name,
+            price: unitPrice,
+            basePrice: selectedProduct.price,
+            toppings: productAddons.toppings,
+            extras: productAddons.extras,
+            guarniciones: productAddons.guarniciones,
+            customKey: newCustomKey,
+          },
+        ];
+      });
+    } else {
+      addToCart(selectedProduct, productAddons.toppings, productAddons.extras, productAddons.guarniciones);
+    }
+    setEditingCartItemKey(null);
     setSelectedProduct(null);
   };
 
@@ -179,9 +280,19 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const removeFromCart = (customKey) => setCart(cart.filter(item => item.customKey !== customKey));
 
   const total = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  const mixedTotal = ['efectivo', 'transferencia', 'debito', 'online']
+    .reduce((acc, key) => acc + (parseFloat(paymentBreakdown[key]) || 0), 0);
+  const mixedRemaining = Number((total - mixedTotal).toFixed(2));
 
   const [forceDuplicate, setForceDuplicate] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState('');
+
+  const updatePaymentBreakdownValue = (key, value) => {
+    setPaymentBreakdown((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
 
   const submitOrder = async (overrideDuplicate = false) => {
     if (cart.length === 0) {
@@ -216,7 +327,19 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     };
 
     if (paymentMethod === 'mixto') {
-        payload.payment_breakdown = { efectivo: total, transferencia: 0, debito: 0 };
+        const breakdown = {
+          efectivo: parseFloat(paymentBreakdown.efectivo) || 0,
+          transferencia: parseFloat(paymentBreakdown.transferencia) || 0,
+          debito: parseFloat(paymentBreakdown.debito) || 0,
+          online: parseFloat(paymentBreakdown.online) || 0,
+        };
+        const breakdownTotal = Object.values(breakdown).reduce((acc, value) => acc + value, 0);
+        if (Math.abs(breakdownTotal - total) > 0.01) {
+          setLoading(false);
+          setErrorMsg(`El pago mixto debe sumar exactamente $${total.toLocaleString()}`);
+          return;
+        }
+        payload.payment_breakdown = breakdown;
     }
 
     try {
@@ -242,6 +365,10 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         setPhone('');
         setName('');
         setAddress('');
+        setPaymentBreakdown(EMPTY_PAYMENT_BREAKDOWN);
+        setClientMatches([]);
+        setAvailableAddresses([]);
+        setEditingCartItemKey(null);
         setForceDuplicate(false);
         if (isEdit) {
           setTimeout(() => {
@@ -356,12 +483,30 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
             </div>
             <div>
               <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Dirección</label>
+              {availableAddresses.length > 1 && (
+                <select
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full bg-gray-800 border border-blue-500/30 rounded-xl p-2.5 text-white mt-1 mb-2 text-sm outline-none focus:border-blue-500/60 transition-colors"
+                >
+                  {availableAddresses.map((item, index) => (
+                    <option key={`${item.client_id || 'address'}-${index}`} value={item.address}>
+                      {item.address}
+                    </option>
+                  ))}
+                </select>
+              )}
               <input 
                 type="text" 
                 value={address} 
                 onChange={(e) => setAddress(e.target.value)} 
                 className="w-full bg-gray-950/50 border border-gray-700/50 focus:border-blue-500/50 rounded-xl p-2.5 text-white mt-1 text-sm outline-none transition-colors"
               />
+              {availableAddresses.length > 1 && (
+                <p className="text-[11px] text-blue-300 mt-2">
+                  Se encontraron {availableAddresses.length} domicilios para este contacto.
+                </p>
+              )}
             </div>
             
             <div className="flex flex-col sm:flex-row gap-2 pt-2">
@@ -378,6 +523,37 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                 <option value="mixto">Mixto</option>
               </select>
             </div>
+            {paymentMethod === 'mixto' && (
+              <div className="bg-gray-950/40 border border-gray-800/70 rounded-2xl p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Desglose de pago</label>
+                  <span className={`text-xs font-bold ${mixedRemaining === 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                    Restante: ${mixedRemaining.toLocaleString()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ['efectivo', 'Efectivo'],
+                    ['transferencia', 'Transferencia'],
+                    ['debito', 'Débito'],
+                    ['online', 'Online'],
+                  ].map(([key, label]) => (
+                    <div key={key}>
+                      <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{label}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={paymentBreakdown[key]}
+                        onChange={(e) => updatePaymentBreakdownValue(key, e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-white mt-1 text-sm outline-none focus:border-blue-500/50 transition-colors"
+                        placeholder="0"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -414,9 +590,14 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                         <span className="w-6 text-center font-bold text-sm">{item.quantity}</span>
                         <button onClick={() => updateQuantity(item.customKey, 1)} className="w-7 h-7 rounded-lg bg-gray-800 text-gray-300 flex items-center justify-center hover:bg-gray-700 transition-colors hover:text-white">+</button>
                       </div>
-                      <button onClick={() => removeFromCart(item.customKey)} className="text-xs text-red-500/70 hover:text-red-400 font-medium transition-colors flex items-center group">
-                        <Trash2 className="w-3.5 h-3.5 mr-1 group-hover:scale-110 transition-transform" /> Quitar
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => editCartItem(item)} className="text-xs text-blue-400/80 hover:text-blue-300 font-medium transition-colors flex items-center group">
+                          <Pencil className="w-3.5 h-3.5 mr-1 group-hover:scale-110 transition-transform" /> Editar
+                        </button>
+                        <button onClick={() => removeFromCart(item.customKey)} className="text-xs text-red-500/70 hover:text-red-400 font-medium transition-colors flex items-center group">
+                          <Trash2 className="w-3.5 h-3.5 mr-1 group-hover:scale-110 transition-transform" /> Quitar
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
@@ -483,6 +664,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                 <div>
                   <h3 className="text-2xl font-bold text-white mb-1">{selectedProduct.name}</h3>
                   <p className="text-emerald-400 font-bold text-lg">${selectedProduct.price.toLocaleString()}</p>
+                  {editingCartItemKey && (
+                    <p className="text-xs text-blue-300 mt-2 font-semibold uppercase tracking-wide">Editando producto del pedido</p>
+                  )}
                 </div>
                 <button onClick={() => setSelectedProduct(null)} className="text-gray-500 hover:text-white transition-colors bg-gray-800 hover:bg-gray-700 p-2 rounded-full">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -570,7 +754,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                   className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex justify-center items-center gap-2 text-lg"
                 >
                   <Plus className="w-5 h-5" />
-                  Agregar al Ticket
+                  {editingCartItemKey ? 'Guardar Cambios' : 'Agregar al Ticket'}
                 </motion.button>
               </div>
             </motion.div>

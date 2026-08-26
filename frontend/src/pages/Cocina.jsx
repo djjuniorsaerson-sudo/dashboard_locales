@@ -47,26 +47,6 @@ export default function Cocina() {
     return () => clearInterval(interval);
   }, [token]);
 
-  const markDone = async (orderId, kitchenKey) => {
-    try {
-      const res = await fetch(`/api/v1/data/cocina/comandas/${orderId}/${kitchenKey}/state`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: "done" })
-      });
-      if (res.ok) {
-        fetchOrders();
-      } else {
-        console.error("Error updating state");
-      }
-    } catch (e) {
-      console.error("Error marking done", e);
-    }
-  };
-
   const parseServerDateTime = (value) => {
     if (value instanceof Date) {
       return value;
@@ -151,7 +131,10 @@ export default function Cocina() {
     return Boolean(ticket?.visible) && Array.isArray(ticket?.items) && ticket.items.length > 0 && ticket.status !== 'done';
   });
 
-  const readyOrders = orders.filter(o => o.status === 'Listo' && o.archived === false);
+  const readyOrders = orders.filter((order) => {
+    const normalizedStatus = String(order?.status || order?.state || '').trim().toLowerCase();
+    return ['listo', 'entregado'].includes(normalizedStatus) && order.archived === false;
+  });
 
   const displayOrders = activeTab === 'kitchen1' ? kitchen1Orders : 
                         activeTab === 'kitchen2' ? kitchen2Orders : readyOrders;
@@ -220,7 +203,13 @@ export default function Cocina() {
               {displayOrders.map(order => {
                 const ticket = activeTab === 'kitchen1' ? order.kitchen_tickets?.kitchen1 : 
                                activeTab === 'kitchen2' ? order.kitchen_tickets?.kitchen2 : null;
-                
+                const isReadyTab = activeTab === 'listos';
+                const customerAddress = String(
+                  order.customer_address ||
+                  order.address ||
+                  order.delivery_address ||
+                  ''
+                ).trim();
                 const delay = calculateDelay(order);
                 const isCritical = delay >= 20;
                 const isWarning = delay >= 10 && delay < 20;
@@ -230,7 +219,11 @@ export default function Cocina() {
                 let headerBg = "bg-gray-800/80";
                 let timerBg = "bg-gray-700 text-gray-300";
                 
-                if (isCritical) {
+                if (isReadyTab) {
+                  borderGlow = "border-emerald-500 shadow-[0_0_18px_rgba(16,185,129,0.18)]";
+                  headerBg = "bg-emerald-950/20";
+                  timerBg = "bg-emerald-500 text-black";
+                } else if (isCritical) {
                   borderGlow = "border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse";
                   headerBg = "bg-red-950/50";
                   timerBg = "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]";
@@ -264,14 +257,25 @@ export default function Cocina() {
                           {order.needs_reassignment && <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded animate-pulse">REASIGNAR</span>}
                         </span>
                         <h3 className="text-lg font-bold text-white mt-1 truncate" title={order.customer_name || 'Sin Nombre'}>{order.customer_name || 'Sin Nombre'}</h3>
+                        {customerAddress && (
+                          <p className="text-sm text-gray-300 mt-1 break-words" title={customerAddress}>
+                            {customerAddress}
+                          </p>
+                        )}
                       </div>
-                      <div className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl ${timerBg} transition-colors`}>
-                        <div className="flex items-center gap-1">
-                          {isCritical && <Clock className="w-3 h-3 animate-spin" style={{ animationDuration: '2s' }}/>}
-                          <span className="text-xl font-black">{delay}</span>
+                      {isReadyTab ? (
+                        <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${timerBg} transition-colors`}>
+                          <CheckCircle2 className="w-7 h-7" />
                         </div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest">MIN</span>
-                      </div>
+                      ) : (
+                        <div className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl ${timerBg} transition-colors`}>
+                          <div className="flex items-center gap-1">
+                            {isCritical && <Clock className="w-3 h-3 animate-spin" style={{ animationDuration: '2s' }}/>}
+                            <span className="text-xl font-black">{delay}</span>
+                          </div>
+                          <span className="text-[10px] uppercase font-bold tracking-widest">MIN</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Card Body - Items */}
@@ -332,23 +336,11 @@ export default function Cocina() {
                       )}
                     </div>
 
-                    {/* Footer Actions */}
-                    {activeTab !== 'listos' && (
-                      <div className="p-3 bg-gray-950 border-t border-gray-800">
-                        <button 
-                          onClick={() => markDone(order.id, activeTab)} 
-                          className="w-full bg-gray-800 hover:bg-emerald-500 text-gray-300 hover:text-black font-bold py-3 rounded-xl transition-all duration-300 shadow-md flex items-center justify-center gap-2 group"
-                        >
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500 group-hover:text-black transition-colors" />
-                          Marcar Terminado
-                        </button>
-                      </div>
-                    )}
                     {activeTab === 'listos' && (
                       <div className="p-4 border-t border-gray-800 bg-gray-900 text-center">
                         <span className="text-emerald-500 font-bold flex items-center justify-center">
                           <CheckCircle2 className="w-5 h-5 mr-1" />
-                          Esperando Despacho / Retiro
+                          Entregado
                         </span>
                       </div>
                     )}

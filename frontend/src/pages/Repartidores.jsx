@@ -78,11 +78,27 @@ export default function Repartidores() {
     setHistoryModalOpen(true);
     setLoadingHistory(true);
     try {
-        const res = await fetch(`/api/v1/data/repartidor/${driver.id}/history`, {
+        const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+        const res = await fetch(`/api/v1/data/repartidores/history${installationQuery}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
-            setDriverHistory(await res.json());
+            const historyRows = await res.json();
+            const filteredRows = (historyRows || []).filter((row) => {
+              const driverId = Number(row.repartidor_id || row.driver_id || 0);
+              const driverName = String(row.repartidor_name || row.driver_name || '').trim().toLowerCase();
+              return driverId === Number(driver.id) || driverName === String(driver.name || '').trim().toLowerCase();
+            }).map((row) => ({
+              ...row,
+              id: row.trip_id || row.id,
+              pedido_id: row.order_id || row.pedido_id || null,
+              total_amount: Number(row.total_amount || 0),
+              created_at: row.assigned_at || row.created_at || row.order_created_at || null,
+              address: getTripDestination(row),
+              notes: row.notes || '',
+              status: row.status || row.movement_type || 'activo',
+            }));
+            setDriverHistory(filteredRows);
         }
     } catch (e) {
         console.error(e);

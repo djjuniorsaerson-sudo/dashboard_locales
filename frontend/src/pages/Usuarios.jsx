@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Usuarios() {
-  const { token } = useAuth();
+  const { token, currentLocation } = useAuth();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -19,7 +19,8 @@ export default function Usuarios() {
   const fetchUsuarios = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/data/usuarios`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/usuarios${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -35,12 +36,13 @@ export default function Usuarios() {
 
   useEffect(() => {
     fetchUsuarios();
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const handleCreateUsuario = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/v1/data/usuarios`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/usuarios${installationQuery}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,7 +67,8 @@ export default function Usuarios() {
     e.preventDefault();
     if (!selectedUser) return;
     try {
-      const res = await fetch(`/api/v1/data/usuarios/${selectedUser.id}/password`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/usuarios/${selectedUser.id}/password${installationQuery}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -92,7 +95,8 @@ export default function Usuarios() {
     if (!window.confirm(`¿Seguro que deseas ${newStatus ? 'activar' : 'desactivar'} al usuario ${user.username}?`)) return;
     
     try {
-      const res = await fetch(`/api/v1/data/usuarios/${user.id}/status`, {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/usuarios/${user.id}/status${installationQuery}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
