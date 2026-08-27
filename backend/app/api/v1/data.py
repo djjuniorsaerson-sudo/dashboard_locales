@@ -113,6 +113,117 @@ def _fetch_active_orders_for_installation(db: Session, current_user: User, insta
     return snapshot.get("orders", [])
 
 
+def _extract_remote_payload(payload):
+    if isinstance(payload, dict) and "data" in payload:
+        return payload.get("data")
+    return payload
+
+
+def _build_remote_cashbox_report(client: YummyIntegrationClient):
+    initial_payload = _extract_remote_payload(client.request("GET", "/api/caja"))
+    if not isinstance(initial_payload, dict):
+        raise RuntimeError("Remote cashbox summary unavailable")
+
+    available_dates = list(initial_payload.get("available_dates") or [])
+    if not available_dates:
+        date_value = str(initial_payload.get("date") or datetime.now().date().isoformat())
+        available_dates = [date_value]
+
+    global_shift_history = list(initial_payload.get("shift_history") or [])
+    report = []
+
+    for date_value in available_dates[:30]:
+        day_payload = _extract_remote_payload(client.request("GET", f"/api/caja?date={date_value}"))
+        if not isinstance(day_payload, dict):
+            continue
+
+        day_shift_history = [
+            row for row in global_shift_history
+            if str(row.get("date") or "") == str(date_value)
+        ]
+
+        shifts = []
+        shift_counter = 1
+        for history_row in reversed(day_shift_history):
+            shift_label = str(history_row.get("shift") or "general").strip() or "general"
+            closed_at = str(history_row.get("closed_at") or "").strip()
+            query = f"/api/caja/shift-summary?date={date_value}&shift={shift_label}"
+            if closed_at:
+                query += f"&closed_at={closed_at}"
+            shift_payload = _extract_remote_payload(client.request("GET", query))
+            if not isinstance(shift_payload, dict):
+                continue
+            shifts.append({
+                "shift_id": shift_counter,
+                "shift_label": str(shift_payload.get("shift") or shift_label).strip() or "general",
+                "saldo_inicial": float(shift_payload.get("opening_balance") or 0),
+                "ingresos": float(shift_payload.get("sales_total") or 0),
+                "salidas": float(
+                    (shift_payload.get("withdrawals_total") or 0)
+                    + (shift_payload.get("vouchers_total") or 0)
+                    + (shift_payload.get("losses_total") or 0)
+                ),
+                "start_time": shift_payload.get("start_at"),
+                "end_time": shift_payload.get("end_at"),
+                "efectivo": float(shift_payload.get("cash_total") or 0),
+                "transferencia": float(shift_payload.get("transfer_total") or 0),
+                "online": float(shift_payload.get("online_total") or 0),
+                "debito": float(shift_payload.get("debit_total") or 0),
+                "mixto": 0.0,
+                "movimientos": list(shift_payload.get("movements") or []),
+            })
+            shift_counter += 1
+
+        if str(day_payload.get("status") or "").strip().lower() == "open":
+            active_shift_label = str(day_payload.get("shift_label") or "general").strip() or "general"
+            shift_payload = _extract_remote_payload(
+                client.request("GET", f"/api/caja/shift-summary?date={date_value}&shift={active_shift_label}")
+            )
+            if isinstance(shift_payload, dict):
+                active_start = str(shift_payload.get("start_at") or "")
+                already_listed = any(str(shift.get("start_time") or "") == active_start for shift in shifts)
+                if not already_listed:
+                    shifts.append({
+                        "shift_id": shift_counter,
+                        "shift_label": str(shift_payload.get("shift") or active_shift_label).strip() or "general",
+                        "saldo_inicial": float(shift_payload.get("opening_balance") or 0),
+                        "ingresos": float(shift_payload.get("sales_total") or 0),
+                        "salidas": float(
+                            (shift_payload.get("withdrawals_total") or 0)
+                            + (shift_payload.get("vouchers_total") or 0)
+                            + (shift_payload.get("losses_total") or 0)
+                        ),
+                        "start_time": shift_payload.get("start_at"),
+                        "end_time": shift_payload.get("end_at"),
+                        "efectivo": float(shift_payload.get("cash_total") or 0),
+                        "transferencia": float(shift_payload.get("transfer_total") or 0),
+                        "online": float(shift_payload.get("online_total") or 0),
+                        "debito": float(shift_payload.get("debit_total") or 0),
+                        "mixto": 0.0,
+                        "movimientos": list(shift_payload.get("movements") or []),
+                    })
+
+        shifts.sort(key=lambda shift: str(shift.get("start_time") or ""), reverse=True)
+
+        report.append({
+            "date": str(day_payload.get("date") or date_value),
+            "total_ingresos": float(day_payload.get("sales_total") or 0),
+            "total_salidas": float(
+                (day_payload.get("withdrawals_total") or 0)
+                + (day_payload.get("vouchers_total") or 0)
+            ),
+            "neto_dia": float(day_payload.get("cash_balance") or 0),
+            "efectivo": float(day_payload.get("cash_total") or 0),
+            "transferencia": float(day_payload.get("transfer_total") or 0),
+            "online": float(day_payload.get("online_total") or 0),
+            "debito": float(day_payload.get("debit_total") or 0),
+            "mixto": 0.0,
+            "shifts": shifts,
+        })
+
+    return report
+
+
 def _format_order_item_detail(item: dict) -> str:
     quantity = item.get("quantity", 1) or 1
     name = str(item.get("product_name") or item.get("name") or "Producto").strip()
@@ -329,7 +440,10 @@ def create_client(
     current_user: User = Depends(deps.get_current_user),
 ):
     client = get_integration_client_for_installation(db, current_user, installation_id)
-    payload = client.request("POST", "/api/clientes", payload=data.model_dump(exclude_none=True))
+    request_payload = data.model_dump(exclude_none=True)
+    request_payload["name"] = str(request_payload.get("name") or "").strip() or "Cliente"
+    request_payload["addresses"] = [request_payload["address"]] if str(request_payload.get("address") or "").strip() else []
+    payload = client.request("POST", "/api/clientes", payload=request_payload)
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
@@ -343,7 +457,10 @@ def update_client(
     current_user: User = Depends(deps.get_current_user),
 ):
     client = get_integration_client_for_installation(db, current_user, installation_id)
-    payload = client.request("PUT", f"/api/clientes/{client_id}", payload=data.model_dump(exclude_none=True))
+    request_payload = data.model_dump(exclude_none=True)
+    request_payload["name"] = str(request_payload.get("name") or "").strip() or "Cliente"
+    request_payload["addresses"] = [request_payload["address"]] if str(request_payload.get("address") or "").strip() else []
+    payload = client.request("PUT", f"/api/clientes/{client_id}", payload=request_payload)
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
@@ -515,8 +632,7 @@ def get_caja_report(
     if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
-            remote = deps.RemoteSession(client)
-            report = ModulesExtractor.get_caja_report(remote)
+            report = _build_remote_cashbox_report(client)
             if isinstance(report, list) and len(report) == 0:
                 client.check_health()
             if not isinstance(report, list):
@@ -818,9 +934,9 @@ async def update_pedido(
     try:
         data = await request.json()
         client = get_integration_client_for_installation(db, current_user, installation_id)
-        return client.request("PUT", f"/api/v1/data/pedidos/{order_id}", payload=data)
+        payload = client.request("PUT", f"/api/pedidos/{order_id}", payload=data)
+        return payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
     except Exception as e:
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/pedidos/{order_id}/cancel")
@@ -832,9 +948,9 @@ async def cancel_pedido(
 ):
     try:
         client = get_integration_client_for_installation(db, current_user, installation_id)
-        return client.request("POST", f"/api/v1/data/pedidos/{order_id}/cancel")
+        payload = client.request("POST", f"/api/pedidos/{order_id}/cancel")
+        return payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
     except Exception as e:
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/caja/movimiento")

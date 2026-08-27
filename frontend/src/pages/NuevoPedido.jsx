@@ -117,6 +117,13 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const [productAddons, setProductAddons] = useState({ toppings: [], extras: [], guarniciones: [] });
   const [editingCartItemKey, setEditingCartItemKey] = useState(null);
 
+  const normalizeText = (value) =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+
   const openCustomizer = (product) => {
     const hasAddons = (product.toppings && product.toppings.length > 0) || 
                       (product.extras && product.extras.length > 0) || 
@@ -132,7 +139,8 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   };
 
   const editCartItem = (item) => {
-    const product = products.find((entry) => Number(entry.id) === Number(item.product_id));
+    const product = products.find((entry) => Number(entry.id) === Number(item.product_id))
+      || products.find((entry) => normalizeText(entry.name) === normalizeText(item.product_name || item.name));
     if (!product) {
       setErrorMsg('No encontré el producto original para editar este ítem.');
       return;
