@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
 export default function Clientes() {
   const { token, currentLocation } = useAuth();
@@ -19,6 +20,12 @@ export default function Clientes() {
 
   useEffect(() => {
     fetchClients();
+    return subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.some((module) => ['clients', 'orders'].includes(module))) {
+        return;
+      }
+      fetchClients();
+    });
   }, [token, currentLocation?.id]);
 
   const fetchClients = async () => {
@@ -84,6 +91,7 @@ export default function Clientes() {
       if (res.ok) {
         await fetchClients();
         closeModal();
+        dispatchPanelSync({ modules: ['clients', 'orders'] });
       } else {
         alert("Error al guardar el cliente.");
       }
@@ -109,6 +117,7 @@ export default function Clientes() {
 
       if (res.ok) {
         setClients(clients.filter(c => c.id !== clientId));
+        dispatchPanelSync({ modules: ['clients', 'orders'] });
       } else {
         alert("Error al eliminar el cliente.");
       }
@@ -132,6 +141,7 @@ export default function Clientes() {
 
       if (res.ok) {
         await fetchClients();
+        dispatchPanelSync({ modules: ['clients'] });
       } else {
         alert("Error al reiniciar el contador mensual.");
       }

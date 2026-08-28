@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, CheckCircle2 } from 'lucide-react';
+import LocationSyncBanner from '../components/LocationSyncBanner';
+import { subscribePanelSync } from '../components/syncEvents';
 
 export default function Cocina() {
-  const { token } = useAuth();
+  const { token, currentLocation } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('kitchen1'); // kitchen1, kitchen2, listos
@@ -44,7 +46,16 @@ export default function Cocina() {
     fetchConfig();
     fetchOrders();
     const interval = setInterval(fetchOrders, 4000); // Polling cada 4s
-    return () => clearInterval(interval);
+    const unsubscribe = subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.some((module) => ['orders', 'kitchen', 'dashboard'].includes(module))) {
+        return;
+      }
+      fetchOrders();
+    });
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, [token]);
 
   const parseServerDateTime = (value) => {
@@ -136,11 +147,44 @@ export default function Cocina() {
     return ['listo', 'entregado'].includes(normalizedStatus) && order.archived === false;
   });
 
+  const isOrderPaid = (order) => {
+    if (typeof order?.is_paid === 'boolean') {
+      return order.is_paid;
+    }
+
+    const method = String(order?.payment_method || '').trim().toLowerCase();
+    const detail = String(order?.payment_detail || '').trim().toLowerCase();
+    const breakdown = order?.payment_breakdown || {};
+    const transferAmount = Number(breakdown?.transferencia || 0);
+    const onlineAmount = Number(breakdown?.online || 0);
+    const awaitingTransfer = detail.includes('transfer') && detail.includes('pend');
+
+    if (awaitingTransfer) {
+      return false;
+    }
+
+    return (
+      method === 'transferencia'
+      || transferAmount > 0
+      || onlineAmount > 0
+      || detail.includes('confirm')
+      || detail.includes('pagad')
+    );
+  };
+
+  const paymentStateLabel = (order) => (isOrderPaid(order) ? 'Pagado' : 'No pagado');
+
   const displayOrders = activeTab === 'kitchen1' ? kitchen1Orders : 
                         activeTab === 'kitchen2' ? kitchen2Orders : readyOrders;
 
   return (
     <div className="flex flex-col h-full space-y-6">
+      <LocationSyncBanner
+        location={currentLocation}
+        title="Estado de cocina"
+        onlineMessage="La cocina está leyendo pedidos en vivo."
+        offlineMessage="La cocina puede mostrar el último estado sincronizado. Si el local cae, puede haber demora hasta reconectar."
+      />
       <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-4">
         <div className="flex items-center gap-4">
           <div>
@@ -261,6 +305,22 @@ export default function Cocina() {
                           <p className="text-sm text-gray-300 mt-1 break-words" title={customerAddress}>
                             {customerAddress}
                           </p>
+                        )}
+                        {isReadyTab && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                              {String(order.payment_method || 'sin definir').trim() || 'sin definir'}
+                            </span>
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                                isOrderPaid(order)
+                                  ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                                  : 'border-red-500/30 bg-red-500/15 text-red-300'
+                              }`}
+                            >
+                              {paymentStateLabel(order)}
+                            </span>
+                          </div>
                         )}
                       </div>
                       {isReadyTab ? (

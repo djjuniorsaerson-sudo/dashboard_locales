@@ -22,6 +22,8 @@ router = APIRouter()
 poll_token_header = APIKeyHeader(name="X-Poll-Token", auto_error=True)
 
 HEARTBEAT_TIMEOUT_SECONDS = 120
+RETRYABLE_REMOTE_ACTION_TYPES = {"CREATE_ORDER", "ADJUST_STOCK", "ADD_CASH_MOVEMENT"}
+MAX_REMOTE_ACTION_RETRIES = 5
 
 
 class YummyManualCreate(BaseModel):
@@ -88,6 +90,47 @@ class CommandPayload(BaseModel):
     data: dict
 
 
+def _action_retry_count(action: RemoteAction) -> int:
+    payload = action.result_payload if isinstance(action.result_payload, dict) else {}
+    try:
+        return int(payload.get("_retry_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _pending_actions_summary(db: Session, installation_id) -> dict[str, int]:
+    rows = db.query(RemoteAction.action_type, RemoteAction.status).filter(
+        RemoteAction.installation_id == installation_id,
+        RemoteAction.status.in_([RemoteActionStatus.PENDING, RemoteActionStatus.PROCESSING]),
+    ).all()
+    summary: dict[str, int] = {}
+    for action_type, _status in rows:
+        key = str(action_type or "UNKNOWN").strip() or "UNKNOWN"
+        summary[key] = summary.get(key, 0) + 1
+    return summary
+
+
+def _requeue_retryable_actions(db: Session, installation_id) -> int:
+    actions = db.query(RemoteAction).filter(
+        RemoteAction.installation_id == installation_id,
+        RemoteAction.status == RemoteActionStatus.FAILED,
+        RemoteAction.action_type.in_(list(RETRYABLE_REMOTE_ACTION_TYPES)),
+    ).all()
+    requeued = 0
+    for action in actions:
+        retry_count = _action_retry_count(action)
+        if retry_count >= MAX_REMOTE_ACTION_RETRIES:
+            continue
+        action.status = RemoteActionStatus.PENDING
+        action.error_message = None
+        payload = dict(action.result_payload or {})
+        payload["_queued"] = True
+        action.result_payload = payload
+        db.add(action)
+        requeued += 1
+    return requeued
+
+
 def compute_installation_status(install: YummyInstallation) -> str:
     if install.connection_status == "REVOKED":
         return "REVOKED"
@@ -99,6 +142,21 @@ def compute_installation_status(install: YummyInstallation) -> str:
 
 
 def serialize_installation(install: YummyInstallation) -> dict[str, Any]:
+    db = object_session(install)
+    pending_actions_count = 0
+    pending_actions_summary = {}
+    latest_failed_action = None
+    if db is not None:
+        pending_actions_count = db.query(RemoteAction).filter(
+            RemoteAction.installation_id == install.id,
+            RemoteAction.status.in_([RemoteActionStatus.PENDING, RemoteActionStatus.PROCESSING]),
+        ).count()
+        pending_actions_summary = _pending_actions_summary(db, install.id)
+        latest_failed_action = db.query(RemoteAction).filter(
+            RemoteAction.installation_id == install.id,
+            RemoteAction.status == RemoteActionStatus.FAILED,
+        ).order_by(RemoteAction.updated_at.desc(), RemoteAction.created_at.desc()).first()
+
     return {
         "id": str(install.id),
         "local_id": install.local_id,
@@ -110,6 +168,10 @@ def serialize_installation(install: YummyInstallation) -> dict[str, Any]:
         "last_health_check": install.last_health_check,
         "last_sync_at": install.last_sync_at,
         "last_seen_ip": install.last_seen_ip,
+        "pending_actions_count": pending_actions_count,
+        "pending_actions_summary": pending_actions_summary,
+        "last_error_message": latest_failed_action.error_message if latest_failed_action else None,
+        "last_error_at": latest_failed_action.updated_at if latest_failed_action else None,
         "created_at": install.created_at,
     }
 
@@ -361,8 +423,9 @@ def test_connection(
         status_data = client.get_status()
         install.connection_status = "ONLINE"
         install.last_health_check = datetime.utcnow()
+        requeued = _requeue_retryable_actions(db, install.id)
         db.commit()
-        return {"status": "success", "health": health_data, "connector_status": status_data}
+        return {"status": "success", "health": health_data, "connector_status": status_data, "requeued_actions": requeued}
     except Exception as exc:
         install.connection_status = "ERROR"
         db.commit()
@@ -422,6 +485,8 @@ def get_synced_catalog(
                 "name": product.name,
                 "description": product.description,
                 "price": float(product.price or 0),
+                "half_price": float(((product.raw_payload or {}).get("half_price")) or 0),
+                "allows_half": bool((product.raw_payload or {}).get("allows_half")),
                 "stock": float(product.stock or 0),
                 "active": product.is_active,
                 "toppings": (product.raw_payload or {}).get("toppings", []) or [],
@@ -446,9 +511,10 @@ def connector_heartbeat(
     installation.base_url = heartbeat.base_url or installation.base_url
     installation.last_seen_ip = heartbeat.tailscale_ip or installation.last_seen_ip
     installation.heartbeat_payload = heartbeat.model_dump()
+    requeued = _requeue_retryable_actions(db, installation.id)
     db.add(installation)
     db.commit()
-    return {"status": "ok", "server_time": datetime.utcnow()}
+    return {"status": "ok", "server_time": datetime.utcnow(), "requeued_actions": requeued}
 
 
 @router.post("/connector/installations/{installation_id}/catalog-sync")

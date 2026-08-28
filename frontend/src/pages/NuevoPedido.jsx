@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, ShoppingBag, User, CheckCircle2, Pencil } from 'lucide-react';
+import { dispatchPanelSync } from '../components/syncEvents';
 
 const EMPTY_PAYMENT_BREAKDOWN = {
   efectivo: '',
@@ -116,6 +117,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productAddons, setProductAddons] = useState({ toppings: [], extras: [], guarniciones: [] });
   const [editingCartItemKey, setEditingCartItemKey] = useState(null);
+  const [modalPortionType, setModalPortionType] = useState('completo');
 
   const normalizeText = (value) =>
     String(value || '')
@@ -124,23 +126,45 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       .trim()
       .toLowerCase();
 
+  const productBaseName = (productOrName) =>
+    String(typeof productOrName === 'string' ? productOrName : productOrName?.name || '')
+      .replace(/^1\/2\s+/i, '')
+      .trim();
+
+  const configuredProductName = (product, portionType) => {
+    const baseName = productBaseName(product);
+    return portionType === 'mitad' ? `1/2 ${baseName}` : baseName;
+  };
+
+  const configuredProductPrice = (product, portionType) => {
+    if (portionType === 'mitad' && Number(product?.allows_half)) {
+      return Number(product?.half_price || 0);
+    }
+    return Number(product?.price || 0);
+  };
+
+  const configuredStockFactor = (portionType) => (portionType === 'mitad' ? 0.5 : 1);
+
   const openCustomizer = (product) => {
-    const hasAddons = (product.toppings && product.toppings.length > 0) || 
-                      (product.extras && product.extras.length > 0) || 
+    const hasAddons = (product.toppings && product.toppings.length > 0) ||
+                      (product.extras && product.extras.length > 0) ||
                       (product.guarniciones && product.guarniciones.length > 0);
+    const allowsHalf = Boolean(product?.allows_half);
     
-    if (hasAddons) {
+    if (hasAddons || allowsHalf) {
       setSelectedProduct(product);
       setProductAddons({ toppings: [], extras: [], guarniciones: [] });
       setEditingCartItemKey(null);
+      setModalPortionType('completo');
     } else {
-      addToCart(product, [], [], []);
+      addToCart(product, [], [], [], 'completo');
     }
   };
 
   const editCartItem = (item) => {
     const product = products.find((entry) => Number(entry.id) === Number(item.product_id))
-      || products.find((entry) => normalizeText(entry.name) === normalizeText(item.product_name || item.name));
+      || products.find((entry) => normalizeText(entry.name) === normalizeText(item.product_name || item.name))
+      || products.find((entry) => normalizeText(productBaseName(entry)) === normalizeText(productBaseName(item.product_name || item.name)));
     if (!product) {
       setErrorMsg('No encontré el producto original para editar este ítem.');
       return;
@@ -152,6 +176,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       guarniciones: Array.isArray(item.guarniciones) ? item.guarniciones.map((entry) => ({ ...entry, qty: entry.qty || entry.quantity || 1 })) : [],
     });
     setEditingCartItemKey(item.customKey);
+    setModalPortionType(String(item.portion_type || '').trim().toLowerCase() === 'mitad' ? 'mitad' : 'completo');
   };
 
   const handleAddonToggle = (category, addon) => {
@@ -187,6 +212,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   };
 
   const confirmCustomProduct = () => {
+    const configuredName = configuredProductName(selectedProduct, modalPortionType);
+    const configuredPrice = configuredProductPrice(selectedProduct, modalPortionType);
+    const configuredFactor = configuredStockFactor(modalPortionType);
     if (editingCartItemKey) {
       const previousItem = cart.find((item) => item.customKey === editingCartItemKey);
       if (!previousItem) {
@@ -196,8 +224,8 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       }
 
       const addonsTotal = calculateAddonsPrice(productAddons.toppings, productAddons.extras, productAddons.guarniciones);
-      const unitPrice = parseFloat(selectedProduct.price) + addonsTotal;
-      const newCustomKey = generateCustomKey(selectedProduct.id, productAddons.toppings, productAddons.extras, productAddons.guarniciones);
+      const unitPrice = configuredPrice + addonsTotal;
+      const newCustomKey = generateCustomKey(selectedProduct.id, productAddons.toppings, productAddons.extras, productAddons.guarniciones, modalPortionType);
 
       setCart((prevCart) => {
         const remainingItems = prevCart.filter((item) => item.customKey !== editingCartItemKey);
@@ -217,28 +245,33 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
           {
             ...previousItem,
             product_id: selectedProduct.id,
-            product_name: selectedProduct.name,
+            product_name: configuredName,
             price: unitPrice,
-            basePrice: selectedProduct.price,
+            basePrice: configuredPrice,
             toppings: productAddons.toppings,
             extras: productAddons.extras,
             guarniciones: productAddons.guarniciones,
+            portion_type: modalPortionType,
+            stock_factor: configuredFactor,
+            base_quantity: previousItem.base_quantity || 1,
+            bundle_quantity: previousItem.bundle_quantity || 1,
             customKey: newCustomKey,
           },
         ];
       });
     } else {
-      addToCart(selectedProduct, productAddons.toppings, productAddons.extras, productAddons.guarniciones);
+      addToCart(selectedProduct, productAddons.toppings, productAddons.extras, productAddons.guarniciones, modalPortionType);
     }
     setEditingCartItemKey(null);
     setSelectedProduct(null);
+    setModalPortionType('completo');
   };
 
-  const generateCustomKey = (productId, toppings, extras, guarniciones) => {
+  const generateCustomKey = (productId, toppings, extras, guarniciones, portionType = 'completo') => {
       const topIds = [...toppings].sort((a,b) => a.id - b.id).map(t => `T${t.id}`).join('-');
       const extIds = [...extras].sort((a,b) => a.id - b.id).map(e => `E${e.id}Q${e.qty||1}`).join('-');
       const guaIds = [...guarniciones].sort((a,b) => a.id - b.id).map(g => `G${g.id}Q${g.qty||1}`).join('-');
-      return `${productId}|${topIds}|${extIds}|${guaIds}`;
+      return `${productId}|${portionType}|${topIds}|${extIds}|${guaIds}`;
   };
 
   const calculateAddonsPrice = (toppings, extras, guarniciones) => {
@@ -249,10 +282,11 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       return t;
   };
 
-  const addToCart = (product, toppings = [], extras = [], guarniciones = []) => {
+  const addToCart = (product, toppings = [], extras = [], guarniciones = [], portionType = 'completo') => {
     const addonsTotal = calculateAddonsPrice(toppings, extras, guarniciones);
-    const unitPrice = parseFloat(product.price) + addonsTotal;
-    const customKey = generateCustomKey(product.id, toppings, extras, guarniciones);
+    const basePrice = configuredProductPrice(product, portionType);
+    const unitPrice = basePrice + addonsTotal;
+    const customKey = generateCustomKey(product.id, toppings, extras, guarniciones, portionType);
 
     const existingItemIndex = cart.findIndex(item => item.customKey === customKey);
     
@@ -263,13 +297,17 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     } else {
       setCart([...cart, { 
         product_id: product.id, 
-        product_name: product.name, 
+        product_name: configuredProductName(product, portionType), 
         quantity: 1, 
         price: unitPrice, 
-        basePrice: product.price,
+        basePrice: basePrice,
         toppings: toppings,
         extras: extras,
         guarniciones: guarniciones,
+        portion_type: portionType,
+        stock_factor: configuredStockFactor(portionType),
+        base_quantity: 1,
+        bundle_quantity: 1,
         customKey: customKey
       }]);
     }
@@ -327,6 +365,10 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         product_id: item.product_id,
         product_name: item.product_name,
         quantity: item.quantity,
+        base_quantity: item.base_quantity || item.quantity || 1,
+        bundle_quantity: item.bundle_quantity || 1,
+        stock_factor: item.stock_factor || 1,
+        portion_type: item.portion_type || 'completo',
         price: item.price - calculateAddonsPrice(item.toppings || [], item.extras || [], item.guarniciones || []),
         toppings: (item.toppings || []).map(t => ({...t, quantity: t.qty || 1})),
         extras: (item.extras || []).map(e => ({...e, quantity: e.qty || 1})),
@@ -368,7 +410,11 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       const data = await res.json();
       
       if (res.ok) {
-        setSuccessMsg(isEdit ? "¡Pedido actualizado con éxito!" : "¡Pedido enviado al conector para ejecución!");
+        const createMessage = data?.queued
+          ? (data?.message || '¡Pedido en cola! Se enviará cuando el local vuelva a estar online.')
+          : "¡Pedido enviado al conector para ejecución!";
+        setSuccessMsg(isEdit ? "¡Pedido actualizado con éxito!" : createMessage);
+        dispatchPanelSync({ modules: ['orders', 'kitchen', 'dashboard', 'cash'] });
         setCart([]);
         setPhone('');
         setName('');
@@ -671,7 +717,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
               <div className="p-6 border-b border-gray-800/80 bg-gray-800/30 flex justify-between items-start backdrop-blur-md">
                 <div>
                   <h3 className="text-2xl font-bold text-white mb-1">{selectedProduct.name}</h3>
-                  <p className="text-emerald-400 font-bold text-lg">${selectedProduct.price.toLocaleString()}</p>
+                  <p className="text-emerald-400 font-bold text-lg">
+                    ${configuredProductPrice(selectedProduct, modalPortionType).toLocaleString()}
+                  </p>
                   {editingCartItemKey && (
                     <p className="text-xs text-blue-300 mt-2 font-semibold uppercase tracking-wide">Editando producto del pedido</p>
                   )}
@@ -682,6 +730,32 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
               </div>
 
               <div className="p-6 overflow-y-auto flex-1 custom-scrollbar bg-gray-900/80">
+                {Boolean(selectedProduct.allows_half) && (
+                  <div className="mb-8">
+                    <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center">
+                      <span className="w-2 h-2 rounded-full bg-fuchsia-500 mr-2"></span> Porción
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setModalPortionType('completo')}
+                        className={`p-3 rounded-xl border transition-all ${modalPortionType === 'completo' ? 'bg-fuchsia-500/10 border-fuchsia-500/50 text-fuchsia-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'}`}
+                      >
+                        <span className="block font-semibold text-sm">Completo</span>
+                        <span className="block mt-1 text-xs text-emerald-400">${Number(selectedProduct.price || 0).toLocaleString()}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModalPortionType('mitad')}
+                        className={`p-3 rounded-xl border transition-all ${modalPortionType === 'mitad' ? 'bg-fuchsia-500/10 border-fuchsia-500/50 text-fuchsia-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'}`}
+                      >
+                        <span className="block font-semibold text-sm">1/2 porción</span>
+                        <span className="block mt-1 text-xs text-emerald-400">${Number(selectedProduct.half_price || 0).toLocaleString()}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {selectedProduct.toppings && selectedProduct.toppings.length > 0 && (
                   <div className="mb-8">
                     <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Toppings (Si/No)</h4>

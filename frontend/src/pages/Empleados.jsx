@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
 export default function Empleados() {
   const { token, currentLocation } = useAuth();
@@ -64,6 +65,13 @@ export default function Empleados() {
   useEffect(() => {
     fetchEmployees();
     fetchNovedades();
+    return subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.some((module) => ['employees', 'cash'].includes(module))) {
+        return;
+      }
+      fetchEmployees();
+      fetchNovedades();
+    });
   }, [token, currentLocation?.id]);
 
   const handleOpenModal = (employee, type) => {
@@ -119,6 +127,7 @@ export default function Empleados() {
         await fetchEmployees();
         await fetchNovedades();
         closeModal();
+        dispatchPanelSync({ modules: ['employees', 'cash'] });
       } else {
         alert("Hubo un error al registrar la novedad");
       }
@@ -157,6 +166,7 @@ export default function Empleados() {
       await fetchEmployees();
       await fetchNovedades();
       closeEditModal();
+      dispatchPanelSync({ modules: ['employees'] });
     } catch (error) {
       console.error("Error updating employee", error);
       alert(error.message || "No se pudo actualizar el empleado");
@@ -188,6 +198,7 @@ export default function Empleados() {
       }
       await fetchEmployees();
       await fetchNovedades();
+      dispatchPanelSync({ modules: ['employees'] });
     } catch (error) {
       console.error("Error resetting employee", error);
       alert(error.message || "No se pudo reiniciar el empleado");
@@ -219,6 +230,7 @@ export default function Empleados() {
       }
       await fetchEmployees();
       await fetchNovedades();
+      dispatchPanelSync({ modules: ['employees', 'cash'] });
     } catch (error) {
       console.error("Error deleting novedad", error);
       alert(error.message || "No se pudo eliminar la novedad");

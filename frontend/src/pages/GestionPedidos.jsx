@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Edit, XCircle, Search, CreditCard, User, Download } from 'lucide-react';
+import LocationSyncBanner from '../components/LocationSyncBanner';
+import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
 export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
   const { token, currentLocation } = useAuth();
@@ -36,6 +38,12 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
 
   useEffect(() => {
     fetchOrders();
+    return subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.some((module) => ['orders', 'kitchen', 'dashboard', 'cash'].includes(module))) {
+        return;
+      }
+      fetchOrders();
+    });
   }, [token, currentLocation?.id]);
 
   const handleEdit = (order) => {
@@ -67,7 +75,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
         alert(`Error al cancelar: ${res.status} - ${errText}`);
         fetchOrders();
       } else {
-        // En un caso real mostraríamos un toast
+        dispatchPanelSync({ modules: ['orders', 'kitchen', 'dashboard', 'cash'] });
       }
     } catch (e) {
       console.error("Error canceling order", e);
@@ -142,6 +150,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
           ? { ...entry, ...updatedOrder, is_paid: true, payment_detail: 'transferencia confirmada' }
           : entry
       )));
+      dispatchPanelSync({ modules: ['orders', 'kitchen', 'dashboard', 'cash'] });
     } catch (error) {
       console.error('Error marking order as paid', error);
       alert(error.message || 'No se pudo marcar como pagado');
@@ -178,8 +187,14 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white/[0.03] rounded-3xl border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl">
-      {/* Header & Search */}
+    <div className="space-y-6">
+      <LocationSyncBanner
+        location={currentLocation}
+        title="Estado de pedidos"
+        onlineMessage="Los pedidos activos están sincronizados con el local."
+        offlineMessage="Podés revisar el último estado sincronizado. Edición y anulación requieren que el local vuelva a estar online."
+      />
+      <div className="flex flex-col h-full bg-white/[0.03] rounded-3xl border border-white/10 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl">
       <div className="p-6 border-b border-white/10 bg-black/10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-300/80 mb-2">Operación en curso</p>
@@ -361,6 +376,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
             </AnimatePresence>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

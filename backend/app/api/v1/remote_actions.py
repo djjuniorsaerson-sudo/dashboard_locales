@@ -3,6 +3,7 @@ from uuid import UUID
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,8 @@ from app.models.user import User
 from app.models.yummy import YummyInstallation
 
 router = APIRouter()
+RETRYABLE_REMOTE_ACTION_TYPES = {"CREATE_ORDER", "ADJUST_STOCK", "ADD_CASH_MOVEMENT"}
+MAX_REMOTE_ACTION_RETRIES = 5
 
 
 class CreateOrderPayload(BaseModel):
@@ -33,6 +36,50 @@ def get_installation_for_user(db: Session, installation_id: UUID, current_user: 
     if not installation:
         raise HTTPException(status_code=404, detail="Installation not found")
     return installation
+
+
+def get_remote_action_retry_count(action: RemoteAction) -> int:
+    payload = action.result_payload if isinstance(action.result_payload, dict) else {}
+    try:
+        return int(payload.get("_retry_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def set_remote_action_retry_meta(action: RemoteAction, retry_count: int, queued: bool = False) -> None:
+    payload = dict(action.result_payload or {})
+    payload["_retry_count"] = max(0, int(retry_count))
+    payload["_queued"] = bool(queued)
+    action.result_payload = payload
+
+
+def action_payload_summary(action: RemoteAction) -> str:
+    payload = action.payload if isinstance(action.payload, dict) else {}
+    action_type = str(action.action_type or "").strip().upper()
+    if action_type == "CREATE_ORDER":
+        customer_name = str(payload.get("customer_name") or "").strip() or "Cliente"
+        item_count = len(payload.get("items") or [])
+        return f"Pedido para {customer_name} · {item_count} item(s)"
+    if action_type == "ADJUST_STOCK":
+        product_id = payload.get("product_id")
+        target_stock = payload.get("target_stock")
+        return f"Stock producto #{product_id} -> {target_stock}"
+    if action_type == "ADD_CASH_MOVEMENT":
+        movement_type = str(payload.get("movement_type") or "").strip() or "movimiento"
+        amount = payload.get("amount")
+        return f"Caja {movement_type} · ${amount}"
+    return action_type or "Acción remota"
+
+
+def queue_action_for_retry(action: RemoteAction, error_message: str) -> None:
+    retry_count = get_remote_action_retry_count(action) + 1
+    set_remote_action_retry_meta(action, retry_count, queued=True)
+    if retry_count > MAX_REMOTE_ACTION_RETRIES:
+        action.status = RemoteActionStatus.FAILED
+        action.error_message = f"Reintentos agotados: {error_message}"
+        return
+    action.status = RemoteActionStatus.PENDING
+    action.error_message = error_message
 
 
 @router.post("/installations/{installation_id}/create-order")
@@ -89,11 +136,22 @@ def enqueue_create_order(
         db.commit()
         raise exc
     except requests.RequestException as exc:
-        action.status = RemoteActionStatus.FAILED
-        action.error_message = str(exc)
+        queue_action_for_retry(action, f"Connector unreachable: {exc}")
+        installation.connection_status = "OFFLINE"
+        db.add(installation)
         db.add(action)
         db.commit()
-        raise HTTPException(status_code=502, detail=f"Connector unreachable: {exc}")
+        return JSONResponse(
+            status_code=202,
+            content={
+                "id": str(action.id),
+                "status": "QUEUED",
+                "installation_id": str(installation.id),
+                "queued": True,
+                "message": "Pedido en cola. Se reintentará cuando el local vuelva a estar online.",
+                "retry_count": get_remote_action_retry_count(action),
+            },
+        )
 
 
 @router.get("/installations/{installation_id}")
@@ -103,7 +161,10 @@ def list_remote_actions(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     installation = get_installation_for_user(db, installation_id, current_user)
-    actions = db.query(RemoteAction).filter(
+    rows = db.query(RemoteAction, User.email).outerjoin(
+        User,
+        User.id == RemoteAction.created_by_user_id,
+    ).filter(
         RemoteAction.installation_id == installation.id,
     ).order_by(RemoteAction.created_at.desc()).limit(50).all()
     return [
@@ -114,6 +175,11 @@ def list_remote_actions(
             "error_message": action.error_message,
             "created_at": action.created_at,
             "updated_at": action.updated_at,
+            "created_by": email,
+            "retry_count": get_remote_action_retry_count(action),
+            "queued": bool((action.result_payload or {}).get("_queued")),
+            "is_retryable": str(action.action_type or "").strip().upper() in RETRYABLE_REMOTE_ACTION_TYPES,
+            "summary": action_payload_summary(action),
         }
-        for action in actions
+        for action, email in rows
     ]

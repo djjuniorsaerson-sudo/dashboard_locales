@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import LocationSyncBanner from '../components/LocationSyncBanner';
+import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
 export default function Caja() {
   const REPORTS_PER_PAGE = 5;
-  const { token, currentLocation } = useAuth();
+  const { token, currentLocation, fetchLocations } = useAuth();
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedDays, setExpandedDays] = useState({});
@@ -18,6 +20,7 @@ export default function Caja() {
     payment_method: 'efectivo',
     notes: '',
     employee_name: '',
+    employee_id: '',
     shift_name: 'manana'
   });
   const [submitting, setSubmitting] = useState(false);
@@ -70,6 +73,7 @@ export default function Caja() {
       <div class="card"><div class="label">Online</div><div class="value">${formatMoney(summary?.online_total)}</div></div>
       <div class="card"><div class="label">Retiros</div><div class="value">${formatMoney(summary?.withdrawals_total)}</div></div>
       <div class="card"><div class="label">Vales</div><div class="value">${formatMoney(summary?.vouchers_total)}</div></div>
+      <div class="card"><div class="label">Pérdidas</div><div class="value">${formatMoney(summary?.losses_total)}</div></div>
     </div>
 
     <div class="section">
@@ -228,6 +232,16 @@ export default function Caja() {
   useEffect(() => {
     fetchCaja();
     fetchEmployees();
+    const unsubscribe = subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.some((module) => ['cash', 'dashboard', 'users', 'employees'].includes(module))) {
+        return;
+      }
+      fetchCaja();
+      if (!detail?.modules || detail.modules.includes('employees') || detail.modules.includes('users')) {
+        fetchEmployees();
+      }
+    });
+    return unsubscribe;
   }, [token, currentLocation?.id]);
 
   const toggleDay = (date) => {
@@ -235,8 +249,8 @@ export default function Caja() {
   };
 
   const handleOpenModal = (type) => {
-    if (isOffline) {
-      alert('El local está OFFLINE. Podés ver el último cierre sincronizado, pero no registrar movimientos en tiempo real.');
+    if (isOffline && type === 'reset_turno') {
+      alert('El local está OFFLINE. El cierre de turno requiere conexión en tiempo real.');
       return;
     }
     setModalType(type);
@@ -245,6 +259,7 @@ export default function Caja() {
       payment_method: type === 'reset_turno' ? '' : 'efectivo',
       notes: type === 'reset_turno' ? 'Turno: ' : '',
       employee_name: '',
+      employee_id: '',
       shift_name: 'manana'
     });
     setShowModal(true);
@@ -281,6 +296,7 @@ export default function Caja() {
             payment_method: formData.payment_method,
             movement_date: localDateString,
             notes: finalNotes,
+            employee_id: formData.employee_id ? Number(formData.employee_id) : undefined,
             employee_name: formData.employee_name
           };
 
@@ -296,7 +312,12 @@ export default function Caja() {
       if (res.ok) {
         const data = await res.json();
         setShowModal(false);
-        await fetchCaja();
+        await fetchLocations(token);
+        if (!data?.queued) {
+      await fetchCaja();
+      dispatchPanelSync({ modules: ['cash', 'dashboard'] });
+        }
+        dispatchPanelSync({ modules: ['cash', 'dashboard', ...(modalType === 'vale' ? ['employees'] : [])] });
         if (isCashClose) {
           const fallbackDate = localDateString;
           const fallbackShift = formData.shift_name;
@@ -321,6 +342,8 @@ export default function Caja() {
           }
 
           openPrintWindow(printData || data);
+        } else if (data?.queued) {
+          alert(data.message || 'Movimiento en cola. Se enviará cuando el local vuelva a estar online.');
         }
       } else {
         const error = await res.json().catch(() => ({}));
@@ -385,6 +408,12 @@ export default function Caja() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      <LocationSyncBanner
+        location={currentLocation}
+        title="Estado de caja"
+        onlineMessage="Retiros, vales y pérdidas se aplican al instante."
+        offlineMessage="Retiros, vales y pérdidas pueden quedar en cola. El cierre de turno sigue requiriendo conexión."
+      />
       <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-6 shadow-[0_20px_50px_rgba(0,0,0,0.25)]">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -488,7 +517,7 @@ export default function Caja() {
                               <span className="text-emerald-400 font-bold">{formatMoney(summary.totalSales)}</span>
                             </div>
                             <div>
-                              <span className="block text-gray-500 text-xs">Retiros</span>
+                              <span className="block text-gray-500 text-xs">Salidas</span>
                               <span className="text-red-400 font-bold">-{formatMoney(summary.totalWithdrawals)}</span>
                             </div>
                             <div>
@@ -511,7 +540,7 @@ export default function Caja() {
                       <p className="text-base sm:text-lg font-bold text-emerald-500 mt-1 break-words">{formatMoney(summary.totalSales)}</p>
                     </div>
                     <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border border-white/10">
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Retiros</p>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Salidas</p>
                       <p className="text-base sm:text-lg font-bold text-red-400 mt-1 break-words">-{formatMoney(summary.totalWithdrawals)}</p>
                     </div>
                     <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border-2 border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]">

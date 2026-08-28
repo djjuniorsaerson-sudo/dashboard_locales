@@ -1,6 +1,8 @@
 import { createContext, useState, useContext, useEffect } from 'react';
+import { subscribePanelSync } from '../components/syncEvents';
 
 const AuthContext = createContext();
+const LOCATIONS_REFRESH_MS = 15000;
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token') || null);
@@ -22,12 +24,22 @@ export const AuthProvider = ({ children }) => {
           systemType: inst.system_type,
           connectorSlug: inst.connector_slug,
           status: inst.connection_status,
-          deviceName: inst.device_name
+          deviceName: inst.device_name,
+          lastHealthCheck: inst.last_health_check,
+          lastSyncAt: inst.last_sync_at,
+          lastSeenIp: inst.last_seen_ip,
+          pendingActionsCount: Number(inst.pending_actions_count || 0),
+          pendingActionsSummary: inst.pending_actions_summary || {},
+          lastErrorMessage: inst.last_error_message || '',
+          lastErrorAt: inst.last_error_at,
+          createdAt: inst.created_at,
         }));
         setLocations(mapped);
-        if (mapped.length > 0 && !currentLocation) {
-          setCurrentLocation(mapped[0]);
-        }
+        setCurrentLocation((previous) => {
+          if (!mapped.length) return null;
+          if (!previous) return mapped[0];
+          return mapped.find((loc) => loc.id === previous.id) || mapped[0];
+        });
       }
     } catch (e) {
       console.error("Error fetching locations:", e);
@@ -41,6 +53,21 @@ export const AuthProvider = ({ children }) => {
       setLocations([]);
       setCurrentLocation(null);
     }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+    const intervalId = window.setInterval(() => {
+      fetchLocations(token);
+    }, LOCATIONS_REFRESH_MS);
+    return () => window.clearInterval(intervalId);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+    return subscribePanelSync(() => {
+      fetchLocations(token);
+    });
   }, [token]);
 
   const login = (newToken, userData) => {

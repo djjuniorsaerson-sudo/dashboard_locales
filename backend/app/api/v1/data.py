@@ -1,9 +1,10 @@
 from datetime import datetime
 from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 from app.api import deps
+from app.models.remote_action import RemoteAction, RemoteActionStatus
 from app.services.extractor_modules import ModulesExtractor
 from app.services.yummy_client import YummyIntegrationClient
 from app.models.user import User
@@ -119,6 +120,44 @@ def _extract_remote_payload(payload):
     return payload
 
 
+def _queue_installation_action(
+    db: Session,
+    install: YummyInstallation,
+    current_user: User,
+    action_type: str,
+    payload: dict,
+    message: str,
+    extra_response: Optional[dict] = None,
+    mark_offline: bool = False,
+):
+    action = RemoteAction(
+        installation_id=install.id,
+        created_by_user_id=current_user.id,
+        action_type=action_type,
+        status=RemoteActionStatus.PENDING,
+        payload=payload,
+        result_payload={"_retry_count": 0, "_queued": True},
+    )
+    db.add(action)
+    db.flush()
+    if mark_offline:
+        install.connection_status = "OFFLINE"
+        db.add(install)
+    db.commit()
+    db.refresh(action)
+    response = {
+        "id": str(action.id),
+        "status": "QUEUED",
+        "installation_id": str(install.id),
+        "queued": True,
+        "message": message,
+        "retry_count": 0,
+    }
+    if isinstance(extra_response, dict):
+        response.update(extra_response)
+    return JSONResponse(status_code=202, content=response)
+
+
 def _build_remote_cashbox_report(client: YummyIntegrationClient):
     initial_payload = _extract_remote_payload(client.request("GET", "/api/caja"))
     if not isinstance(initial_payload, dict):
@@ -211,6 +250,7 @@ def _build_remote_cashbox_report(client: YummyIntegrationClient):
             "total_salidas": float(
                 (day_payload.get("withdrawals_total") or 0)
                 + (day_payload.get("vouchers_total") or 0)
+                + (day_payload.get("losses_total") or 0)
             ),
             "neto_dia": float(day_payload.get("cash_balance") or 0),
             "efectivo": float(day_payload.get("cash_total") or 0),
@@ -222,6 +262,23 @@ def _build_remote_cashbox_report(client: YummyIntegrationClient):
         })
 
     return report
+
+
+def _refresh_cashbox_snapshot(db: Session, install) -> None:
+    if not install:
+        return
+    try:
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        report = _build_remote_cashbox_report(client)
+        if isinstance(report, list):
+            save_installation_snapshot(
+                db,
+                install.id,
+                CASHBOX_SNAPSHOT_KEY,
+                {"report": report},
+            )
+    except Exception:
+        pass
 
 
 def _format_order_item_detail(item: dict) -> str:
@@ -381,44 +438,88 @@ def update_product_stock(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    client = get_integration_client_for_installation(db, current_user, installation_id)
-    current_rows = client.execute_sql(
-        """
-        SELECT COALESCE(stock_quantity, 0)
-        FROM productos
-        WHERE id = ?
-        LIMIT 1
-        """,
-        [product_id],
-    )
-    rows = (current_rows or {}).get("rows", [])
-    if not rows:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-
-    current_stock = float(rows[0][0] or 0)
     target_stock = float(data.stock)
-    diff = target_stock - current_stock
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        raise HTTPException(status_code=404, detail="Instalación no encontrada")
 
-    if abs(diff) < 0.0001:
-        return {"success": True, "new_stock": current_stock, "message": "Sin cambios"}
+    if installation_is_online(install):
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        try:
+            current_rows = client.execute_sql(
+                """
+                SELECT COALESCE(stock_quantity, 0)
+                FROM productos
+                WHERE id = ?
+                LIMIT 1
+                """,
+                [product_id],
+            )
+            rows = (current_rows or {}).get("rows", [])
+            if not rows:
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    movement_type = "ingreso" if diff > 0 else "salida"
-    payload = client.request(
-        "POST",
-        "/api/integration/stock/movimientos",
-        payload={
+            current_stock = float(rows[0][0] or 0)
+            diff = target_stock - current_stock
+            if abs(diff) < 0.0001:
+                return {"success": True, "new_stock": current_stock, "message": "Sin cambios"}
+
+            movement_type = "ingreso" if diff > 0 else "salida"
+            payload = client.request(
+                "POST",
+                "/api/integration/stock/movimientos",
+                payload={
+                    "product_id": product_id,
+                    "movement_type": movement_type,
+                    "quantity": abs(diff),
+                    "notes": "Ajuste rapido desde panel central",
+                },
+            )
+            return {
+                "success": True,
+                "previous_stock": current_stock,
+                "new_stock": target_stock,
+                "movement": payload.get("data") if isinstance(payload, dict) else payload,
+            }
+        except requests.RequestException:
+            return _queue_installation_action(
+                db,
+                install,
+                current_user,
+                "ADJUST_STOCK",
+                {
+                    "product_id": product_id,
+                    "target_stock": target_stock,
+                    "notes": "Ajuste rapido desde panel central",
+                },
+                "Ajuste de stock en cola. Se aplicará cuando el local vuelva a estar online.",
+                extra_response={
+                    "success": True,
+                    "previous_stock": None,
+                    "new_stock": target_stock,
+                    "product_id": product_id,
+                },
+                mark_offline=True,
+            )
+
+    return _queue_installation_action(
+        db,
+        install,
+        current_user,
+        "ADJUST_STOCK",
+        {
             "product_id": product_id,
-            "movement_type": movement_type,
-            "quantity": abs(diff),
+            "target_stock": target_stock,
             "notes": "Ajuste rapido desde panel central",
         },
+        "Ajuste de stock en cola. Se aplicará cuando el local vuelva a estar online.",
+        extra_response={
+            "success": True,
+            "previous_stock": None,
+            "new_stock": target_stock,
+            "product_id": product_id,
+        },
     )
-    return {
-        "success": True,
-        "previous_stock": current_stock,
-        "new_stock": target_stock,
-        "movement": payload.get("data") if isinstance(payload, dict) else payload,
-    }
 
 @router.get("/clients")
 def get_clients(
@@ -948,7 +1049,7 @@ async def cancel_pedido(
 ):
     try:
         client = get_integration_client_for_installation(db, current_user, installation_id)
-        payload = client.request("POST", f"/api/pedidos/{order_id}/cancel")
+        payload = client.request("DELETE", f"/api/pedidos/{order_id}")
         return payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -960,12 +1061,38 @@ def add_caja_movimiento(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    try:
-        client = get_integration_client_for_installation(db, current_user, installation_id)
-        return client.request("POST", "/api/caja/movimientos", payload=data.dict(exclude_none=True))
-    except Exception as e:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail=str(e))
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        raise HTTPException(status_code=404, detail="Instalación no encontrada")
+
+    request_payload = data.dict(exclude_none=True)
+    if installation_is_online(install):
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        try:
+            return client.request("POST", "/api/caja/movimientos", payload=request_payload)
+        except requests.RequestException:
+            return _queue_installation_action(
+                db,
+                install,
+                current_user,
+                "ADD_CASH_MOVEMENT",
+                request_payload,
+                "Movimiento de caja en cola. Se enviará cuando el local vuelva a estar online.",
+                extra_response={"success": True, "movement_type": request_payload.get("movement_type")},
+                mark_offline=True,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    return _queue_installation_action(
+        db,
+        install,
+        current_user,
+        "ADD_CASH_MOVEMENT",
+        request_payload,
+        "Movimiento de caja en cola. Se enviará cuando el local vuelva a estar online.",
+        extra_response={"success": True, "movement_type": request_payload.get("movement_type")},
+    )
 
 
 @router.post("/caja/reset-turno")
@@ -975,8 +1102,10 @@ def close_cash_shift(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
     client = get_integration_client_for_installation(db, current_user, installation_id)
     payload = client.request("POST", "/api/integration/caja/reset-turno", payload=data.model_dump(exclude_none=True))
+    _refresh_cashbox_snapshot(db, install)
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
@@ -1008,8 +1137,10 @@ def delete_cash_shift(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
     client = get_integration_client_for_installation(db, current_user, installation_id)
     payload = client.request("POST", "/api/integration/caja/shift/delete", payload=data.model_dump(exclude_none=True))
+    _refresh_cashbox_snapshot(db, install)
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
@@ -1055,7 +1186,7 @@ def get_usuarios(
     current_user: User = Depends(deps.get_current_user),
 ):
     client = get_integration_client_for_installation(db, current_user, installation_id)
-    payload = client.request("GET", "/api/auth/users")
+    payload = client.request("GET", "/api/integration/auth/users")
     if isinstance(payload, dict):
         return payload.get("data") or []
     return payload if isinstance(payload, list) else []
@@ -1071,10 +1202,35 @@ def create_usuario(
     client = get_integration_client_for_installation(db, current_user, installation_id)
     payload = client.request(
         "POST",
-        "/api/auth/users",
+        "/api/integration/auth/users",
         payload={
             "username": data.username,
             "password": data.password,
+            "role": data.role,
+            "active": data.active,
+            "allowed_views": default_allowed_views_for_role(data.role),
+        },
+    )
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+@router.put("/usuarios/{user_id}")
+def update_usuario(
+    user_id: int,
+    data: UsuarioData,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request(
+        "PUT",
+        f"/api/integration/auth/users/{user_id}",
+        payload={
+            "username": data.username,
+            "role": data.role,
             "active": data.active,
             "allowed_views": default_allowed_views_for_role(data.role),
         },
@@ -1098,7 +1254,7 @@ def update_usuario_password(
     client = get_integration_client_for_installation(db, current_user, installation_id)
     payload = client.request(
         "PUT",
-        f"/api/auth/users/{user_id}/password",
+        f"/api/integration/auth/users/{user_id}/password",
         payload={"password": password},
     )
     if isinstance(payload, dict) and "data" in payload:
@@ -1119,7 +1275,7 @@ def toggle_usuario_status(
         raise HTTPException(status_code=400, detail="Active status is required")
 
     client = get_integration_client_for_installation(db, current_user, installation_id)
-    users_payload = client.request("GET", "/api/auth/users")
+    users_payload = client.request("GET", "/api/integration/auth/users")
     users = users_payload.get("data") if isinstance(users_payload, dict) else users_payload
     target = next((item for item in (users or []) if int(item.get("id") or 0) == user_id), None)
     if not target:
@@ -1127,13 +1283,28 @@ def toggle_usuario_status(
 
     payload = client.request(
         "PUT",
-        f"/api/auth/users/{user_id}",
+        f"/api/integration/auth/users/{user_id}",
         payload={
             "username": target.get("username") or "",
+            "role": target.get("role") or "custom",
             "active": bool(active),
             "allowed_views": target.get("allowed_views") or list(MANAGED_USER_VIEWS),
         },
     )
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+@router.delete("/usuarios/{user_id}")
+def delete_usuario(
+    user_id: int,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("DELETE", f"/api/integration/auth/users/{user_id}")
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { subscribePanelSync } from '../components/syncEvents';
 
 export default function Repartidores() {
   const { token, currentLocation } = useAuth();
@@ -70,7 +71,18 @@ export default function Repartidores() {
       fetchGlobalHistory();
       fetchDeliveredOrders();
     }, 15000);
-    return () => clearInterval(interval);
+    const unsubscribe = subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.some((module) => ['orders', 'repartidores', 'dashboard'].includes(module))) {
+        return;
+      }
+      fetchRepartidores();
+      fetchGlobalHistory();
+      fetchDeliveredOrders();
+    });
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, [token, currentLocation?.id]);
 
   const viewHistory = async (driver) => {

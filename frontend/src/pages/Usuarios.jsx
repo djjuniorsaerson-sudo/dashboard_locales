@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 
 import { useAuth } from '../context/AuthContext';
+import LocationSyncBanner from '../components/LocationSyncBanner';
+import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
 export default function Usuarios() {
   const { token, currentLocation } = useAuth();
@@ -9,12 +11,23 @@ export default function Usuarios() {
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
 
   // Forms state
   const [createForm, setCreateForm] = useState({ username: '', password: '', role: 'cajero', active: true });
+  const [editForm, setEditForm] = useState({ username: '', role: 'cajero', active: true });
   const [passwordForm, setPasswordForm] = useState({ password: '' });
+
+  const getErrorMessage = async (res, fallback) => {
+    try {
+      const data = await res.json();
+      return data?.detail || data?.message || data?.error || fallback;
+    } catch {
+      return fallback;
+    }
+  };
 
   const fetchUsuarios = async () => {
     setLoading(true);
@@ -26,9 +39,12 @@ export default function Usuarios() {
       if (res.ok) {
         const data = await res.json();
         setUsuarios(data);
+      } else {
+        setUsuarios([]);
       }
     } catch (e) {
       console.error(e);
+      setUsuarios([]);
     } finally {
       setLoading(false);
     }
@@ -36,6 +52,12 @@ export default function Usuarios() {
 
   useEffect(() => {
     fetchUsuarios();
+    return subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.includes('users')) {
+        return;
+      }
+      fetchUsuarios();
+    });
   }, [token, currentLocation?.id]);
 
   const handleCreateUsuario = async (e) => {
@@ -54,12 +76,50 @@ export default function Usuarios() {
         setShowCreateModal(false);
         setCreateForm({ username: '', password: '', role: 'cajero', active: true });
         fetchUsuarios();
+        dispatchPanelSync({ modules: ['users'] });
       } else {
-        alert("Error creando usuario");
+        alert(await getErrorMessage(res, 'Error creando usuario'));
       }
     } catch (e) {
       console.error(e);
       alert("Error de conexión");
+    }
+  };
+
+  const openEditModal = (user) => {
+    setSelectedUser(user);
+    setEditForm({
+      username: user.username || '',
+      role: user.role || 'cajero',
+      active: Boolean(user.active),
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditUsuario = async (e) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    try {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/usuarios/${selectedUser.id}${installationQuery}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ ...editForm, password: '' })
+      });
+      if (res.ok) {
+        setShowEditModal(false);
+        setSelectedUser(null);
+        fetchUsuarios();
+        dispatchPanelSync({ modules: ['users'] });
+      } else {
+        alert(await getErrorMessage(res, 'Error actualizando usuario'));
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error de conexión');
     }
   };
 
@@ -80,9 +140,10 @@ export default function Usuarios() {
         setShowPasswordModal(false);
         setPasswordForm({ password: '' });
         setSelectedUser(null);
+        dispatchPanelSync({ modules: ['users'] });
         alert("Contraseña actualizada correctamente");
       } else {
-        alert("Error actualizando contraseña");
+        alert(await getErrorMessage(res, 'Error actualizando contraseña'));
       }
     } catch (e) {
       console.error(e);
@@ -106,10 +167,35 @@ export default function Usuarios() {
       });
       if (res.ok) {
         fetchUsuarios();
+        dispatchPanelSync({ modules: ['users'] });
+      } else {
+        alert(await getErrorMessage(res, 'Error cambiando estado'));
       }
     } catch (e) {
       console.error(e);
       alert("Error cambiando estado");
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    if (!window.confirm(`¿Seguro que deseas borrar al usuario ${user.username}?`)) return;
+    try {
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
+      const res = await fetch(`/api/v1/data/usuarios/${user.id}${installationQuery}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        fetchUsuarios();
+        dispatchPanelSync({ modules: ['users'] });
+      } else {
+        alert(await getErrorMessage(res, 'Error eliminando usuario'));
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error de conexión');
     }
   };
 
@@ -119,6 +205,12 @@ export default function Usuarios() {
 
   return (
     <div className="space-y-6">
+      <LocationSyncBanner
+        location={currentLocation}
+        title="Estado de usuarios"
+        onlineMessage="Las altas, ediciones y cambios de contraseña impactan directo en Yummy."
+        offlineMessage="La gestión de usuarios depende de la conexión con el local. Si hay cola activa, esperá reconexión."
+      />
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center">
@@ -167,6 +259,12 @@ export default function Usuarios() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button 
+                  onClick={() => openEditModal(u)}
+                  className="bg-blue-600/80 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm transition-colors"
+                >
+                  Editar
+                </button>
+                <button 
                   onClick={() => { setSelectedUser(u); setShowPasswordModal(true); }}
                   className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-sm transition-colors"
                   title="Cambiar Contraseña"
@@ -178,6 +276,12 @@ export default function Usuarios() {
                   className={`${u.active ? 'bg-red-600/80 hover:bg-red-700' : 'bg-green-600/80 hover:bg-green-700'} text-white px-3 py-2 rounded text-sm transition-colors`}
                 >
                   {u.active ? 'Desactivar' : 'Activar'}
+                </button>
+                <button 
+                  onClick={() => handleDeleteUser(u)}
+                  className="bg-red-700/80 hover:bg-red-800 text-white px-3 py-2 rounded text-sm transition-colors"
+                >
+                  Borrar
                 </button>
               </div>
             </div>
@@ -222,6 +326,13 @@ export default function Usuarios() {
                   <td className="p-4 text-right">
                     <div className="flex flex-col sm:flex-row justify-end gap-2">
                       <button 
+                        onClick={() => openEditModal(u)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors"
+                        title="Editar Usuario"
+                      >
+                        Editar
+                      </button>
+                      <button 
                         onClick={() => { setSelectedUser(u); setShowPasswordModal(true); }}
                         className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs transition-colors"
                         title="Cambiar Contraseña"
@@ -233,6 +344,13 @@ export default function Usuarios() {
                         className={`${u.active ? 'bg-red-600/80 hover:bg-red-700' : 'bg-green-600/80 hover:bg-green-700'} text-white px-3 py-1 rounded text-xs transition-colors`}
                       >
                         {u.active ? 'Desactivar' : 'Activar'}
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteUser(u)}
+                        className="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs transition-colors"
+                        title="Borrar Usuario"
+                      >
+                        Borrar
                       </button>
                     </div>
                   </td>
@@ -300,6 +418,60 @@ export default function Usuarios() {
                 </button>
                 <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors">
                   Crear Usuario
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-700">
+            <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-900">
+              <h3 className="text-xl font-bold text-white uppercase tracking-wide">Editar Usuario</h3>
+              <button onClick={() => { setShowEditModal(false); setSelectedUser(null); }} className="text-gray-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <form onSubmit={handleEditUsuario} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Nombre de Usuario</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                  value={editForm.username}
+                  onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Rol</label>
+                <select
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                >
+                  <option value="cajero">Cajero</option>
+                  <option value="encargado">Encargado</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-3 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={editForm.active}
+                  onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })}
+                  className="rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500"
+                />
+                Usuario activo
+              </label>
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => { setShowEditModal(false); setSelectedUser(null); }} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors">
+                  Guardar cambios
                 </button>
               </div>
             </form>

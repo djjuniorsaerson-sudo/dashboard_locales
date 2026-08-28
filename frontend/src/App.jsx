@@ -13,6 +13,7 @@ import GestionPedidos from './pages/GestionPedidos';
 import Usuarios from './pages/Usuarios';
 import Auditoria from './pages/Auditoria';
 import ForcePasswordChange from './pages/ForcePasswordChange';
+import { formatExactDate, formatRelativeDate, getLocationStatusMeta } from './components/locationStatus';
 
 import Cocina from './pages/Cocina';
 
@@ -36,11 +37,18 @@ function WelcomeHub() {
 }
 
 function MainLayout() {
-  const { logout, locations, currentLocation, setCurrentLocation } = useAuth();
+  const { token, logout, locations, currentLocation, setCurrentLocation, fetchLocations } = useAuth();
   const [currentView, setCurrentView] = useState('welcome');
   const [orderToEdit, setOrderToEdit] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showSyncDetails, setShowSyncDetails] = useState(false);
+  const [syncActionLoading, setSyncActionLoading] = useState(false);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [diagnosticsResult, setDiagnosticsResult] = useState(null);
+  const statusMeta = getLocationStatusMeta(currentLocation, isSyncing);
+  const pendingActionsCount = Number(currentLocation?.pendingActionsCount || 0);
+  const pendingActionsSummary = currentLocation?.pendingActionsSummary || {};
 
   const navButtonClass = (view, accent = 'blue') => {
     const active = currentView === view;
@@ -61,6 +69,54 @@ function MainLayout() {
     }
     setCurrentView(view);
     setMobileMenuOpen(false);
+    setShowSyncDetails(false);
+  };
+
+  const refreshLocationStatus = async () => {
+    if (!token) return;
+    setSyncActionLoading(true);
+    try {
+      await fetchLocations(token);
+    } catch (error) {
+      console.error('Error refreshing locations', error);
+    } finally {
+      setSyncActionLoading(false);
+    }
+  };
+
+  const runConnectionDiagnostics = async () => {
+    if (!token || !currentLocation?.id) return;
+    setDiagnosticsLoading(true);
+    setDiagnosticsResult(null);
+    try {
+      const [testRes, diagnosticsRes] = await Promise.all([
+        fetch(`/api/v1/yummy-installations/${currentLocation.id}/test-connection`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/v1/yummy-installations/${currentLocation.id}/diagnostics`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      const testData = await testRes.json().catch(() => ({}));
+      const diagnosticsData = await diagnosticsRes.json().catch(() => ({}));
+
+      setDiagnosticsResult({
+        ok: testRes.ok && diagnosticsRes.ok && diagnosticsData?.reachable !== false,
+        test: testData,
+        diagnostics: diagnosticsData,
+      });
+      await fetchLocations(token);
+    } catch (error) {
+      console.error('Error running diagnostics', error);
+      setDiagnosticsResult({
+        ok: false,
+        diagnostics: { message: 'No se pudo ejecutar el diagnóstico.' },
+      });
+    } finally {
+      setDiagnosticsLoading(false);
+    }
   };
 
   return (
@@ -185,11 +241,118 @@ function MainLayout() {
             )}
             </div>
           </div>
-          <div className="flex items-center space-x-3 text-sm text-gray-400 transition-all duration-300 shrink-0">
-            {isSyncing ? (
-              <span className="flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-amber-300 font-medium tracking-wide"><span className="w-2 h-2 rounded-full bg-amber-400 mr-2 animate-ping"></span> Actualizando...</span>
-            ) : (
-              <span className="flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Sincronizado</span>
+          <div className="relative flex items-center space-x-3 text-sm text-gray-400 transition-all duration-300 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowSyncDetails((current) => !current)}
+              className={`flex items-center gap-3 rounded-full border px-3 py-1.5 text-left transition-colors ${statusMeta.className}`}
+            >
+              <span className={`h-2.5 w-2.5 rounded-full ${statusMeta.dotClassName} ${statusMeta.pulse ? 'animate-pulse' : ''}`}></span>
+              <div className="flex flex-col leading-tight">
+                <span className="text-sm font-medium">{statusMeta.label}</span>
+                <span className="text-[11px] opacity-80">{statusMeta.detail}</span>
+              </div>
+            </button>
+            {showSyncDetails && (
+              <div className="absolute right-0 top-[calc(100%+0.75rem)] z-40 w-[min(92vw,22rem)] rounded-2xl border border-white/10 bg-[#11192a] p-4 shadow-2xl">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-300/80">Diagnóstico</p>
+                    <h3 className="text-sm font-semibold text-white">{currentLocation?.name || 'Local sin seleccionar'}</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncDetails(false)}
+                    className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-gray-300"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-gray-400">Estado</span>
+                    <span className="text-right font-medium text-white">{statusMeta.label}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-gray-400">Última sync</span>
+                    <span className="text-right text-gray-200">
+                      {formatExactDate(currentLocation?.lastSyncAt)}
+                      <span className="mt-1 block text-xs text-gray-500">{formatRelativeDate(currentLocation?.lastSyncAt)}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-gray-400">Último heartbeat</span>
+                    <span className="text-right text-gray-200">
+                      {formatExactDate(currentLocation?.lastHealthCheck)}
+                      <span className="mt-1 block text-xs text-gray-500">{formatRelativeDate(currentLocation?.lastHealthCheck)}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-gray-400">Pendientes</span>
+                    <span className={`text-right font-medium ${pendingActionsCount > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
+                      {pendingActionsCount}
+                    </span>
+                  </div>
+                  {Object.keys(pendingActionsSummary).length > 0 && (
+                    <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                      <span className="block text-gray-400">Pendientes por tipo</span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {Object.entries(pendingActionsSummary).map(([actionType, count]) => (
+                          <span key={actionType} className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-200">
+                            {actionType}: {count}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-gray-400">Última IP vista</span>
+                    <span className="text-right text-gray-200">{currentLocation?.lastSeenIp || 'Sin dato'}</span>
+                  </div>
+                  <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="block text-gray-400">Último error</span>
+                    <span className={`mt-1 block text-sm ${currentLocation?.lastErrorMessage ? 'text-orange-200' : 'text-gray-500'}`}>
+                      {currentLocation?.lastErrorMessage || 'Sin errores recientes'}
+                    </span>
+                    {currentLocation?.lastErrorAt && (
+                      <span className="mt-1 block text-xs text-gray-500">
+                        {formatExactDate(currentLocation.lastErrorAt)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={refreshLocationStatus}
+                      disabled={syncActionLoading}
+                      className={`rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${syncActionLoading ? 'bg-sky-900/30 text-sky-200/70 cursor-not-allowed' : 'bg-sky-500/15 text-sky-200 hover:bg-sky-500/25'}`}
+                    >
+                      {syncActionLoading ? 'Actualizando...' : 'Actualizar estado'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={runConnectionDiagnostics}
+                      disabled={diagnosticsLoading || !currentLocation?.id}
+                      className={`rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${diagnosticsLoading ? 'bg-emerald-900/30 text-emerald-200/70 cursor-not-allowed' : 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'}`}
+                    >
+                      {diagnosticsLoading ? 'Probando...' : 'Probar conexión'}
+                    </button>
+                  </div>
+                  {diagnosticsResult && (
+                    <div className={`rounded-xl px-3 py-2 ${diagnosticsResult.ok ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <span className={`block text-sm font-medium ${diagnosticsResult.ok ? 'text-emerald-200' : 'text-red-200'}`}>
+                        {diagnosticsResult.ok ? 'Conexión correcta' : 'Problema de conexión'}
+                      </span>
+                      <span className="mt-1 block text-xs text-gray-300">
+                        {diagnosticsResult?.diagnostics?.message
+                          || diagnosticsResult?.test?.detail
+                          || (diagnosticsResult?.diagnostics?.response_time_ms ? `Tiempo de respuesta ${diagnosticsResult.diagnostics.response_time_ms} ms` : 'Sin detalle adicional')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </header>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { subscribePanelSync } from '../components/syncEvents';
 
 export default function Products() {
   const { token, currentLocation } = useAuth();
@@ -39,6 +40,12 @@ export default function Products() {
     };
 
     fetchCatalog();
+    return subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.some((module) => ['stock', 'dashboard'].includes(module))) {
+        return;
+      }
+      fetchCatalog();
+    });
   }, [token, currentLocation?.id]);
 
   const getCategoryName = (product) =>
