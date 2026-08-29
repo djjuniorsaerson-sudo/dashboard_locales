@@ -201,10 +201,11 @@ export default function Caja() {
       });
       if (res.ok) {
         const data = await res.json();
-        setReportes(data);
+        const validData = (Array.isArray(data) ? data : []).filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(String(row?.date || '').trim()));
+        setReportes(validData);
         setCurrentPage(1);
-        if (data.length > 0) {
-          setExpandedDays({ [data[0].date]: true });
+        if (validData.length > 0) {
+          setExpandedDays({ [validData[0].date]: true });
         }
       }
     } catch (e) {
@@ -361,6 +362,9 @@ export default function Caja() {
   };
 
   const formatDateLabel = (dateValue) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || '').trim())) {
+      return 'Fecha inválida';
+    }
     return new Date(`${dateValue}T00:00:00`).toLocaleDateString('es-AR', {
       weekday: 'long',
       year: 'numeric',

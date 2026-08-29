@@ -83,6 +83,17 @@ class CashShiftDeleteData(BaseModel):
 
 EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
 CASHBOX_SNAPSHOT_KEY = "cashbox_report_snapshot_v1"
+
+
+def _is_valid_cashbox_date(value: str) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return False
+    try:
+        datetime.strptime(candidate, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
 ACTIVE_ORDERS_SNAPSHOT_KEY = "active_orders_snapshot_v1"
 AUDIT_LOGS_SNAPSHOT_KEY = "audit_logs_snapshot_v1"
 OFFLINE_FALLBACK_THRESHOLD_SECONDS = 20
@@ -163,10 +174,14 @@ def _build_remote_cashbox_report(client: YummyIntegrationClient):
     if not isinstance(initial_payload, dict):
         raise RuntimeError("Remote cashbox summary unavailable")
 
-    available_dates = list(initial_payload.get("available_dates") or [])
+    available_dates = [
+        str(date_value).strip()
+        for date_value in list(initial_payload.get("available_dates") or [])
+        if _is_valid_cashbox_date(date_value)
+    ]
     if not available_dates:
         date_value = str(initial_payload.get("date") or datetime.now().date().isoformat())
-        available_dates = [date_value]
+        available_dates = [date_value] if _is_valid_cashbox_date(date_value) else []
 
     global_shift_history = list(initial_payload.get("shift_history") or [])
     report = []
@@ -244,8 +259,12 @@ def _build_remote_cashbox_report(client: YummyIntegrationClient):
 
         shifts.sort(key=lambda shift: str(shift.get("start_time") or ""), reverse=True)
 
+        resolved_date = str(day_payload.get("date") or date_value).strip()
+        if not _is_valid_cashbox_date(resolved_date):
+            continue
+
         report.append({
-            "date": str(day_payload.get("date") or date_value),
+            "date": resolved_date,
             "total_ingresos": float(day_payload.get("sales_total") or 0),
             "total_salidas": float(
                 (day_payload.get("withdrawals_total") or 0)
