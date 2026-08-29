@@ -717,8 +717,16 @@ def get_caja(db: Session = Depends(deps.get_yummy_db)):
     return ModulesExtractor.get_caja_movimientos(db)
 
 @router.get("/repartidores")
-def get_repartidores(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_repartidores(db)
+def get_repartidores(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("GET", "/api/integration/repartidores")
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
 
 @router.get("/caja/report")
 def get_caja_report(
@@ -794,8 +802,16 @@ def get_clients_by_phone(phone: str, db: Session = Depends(deps.get_yummy_db)):
     }
 
 @router.get("/repartidores/history")
-def get_global_repartidor_history(db: Session = Depends(deps.get_yummy_db)):
-    return ModulesExtractor.get_global_repartidor_history(db)
+def get_global_repartidor_history(
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    client = get_integration_client_for_installation(db, current_user, installation_id)
+    payload = client.request("GET", "/api/integration/repartidores/history")
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
 
 
 @router.get("/repartidores/delivered")
@@ -883,12 +899,28 @@ def get_dashboard_metrics(
             "pedidos_finalizados": int(metrics.get("pedidos_finalizados") or 0),
             "product_sales": product_sales,
             "stock_levels": stock_levels,
+            "dashboard_shift_start": metrics.get("dashboard_shift_start"),
+            "dashboard_shift_end": metrics.get("dashboard_shift_end"),
+            "dashboard_shift_label": metrics.get("dashboard_shift_label"),
+            "dashboard_shift_open": bool(metrics.get("dashboard_shift_open")),
+            "dashboard_shift_closed_at": metrics.get("dashboard_shift_closed_at"),
+            "dashboard_shift_status": metrics.get("dashboard_shift_status") or "",
+            "dashboard_shift_status_label": metrics.get("dashboard_shift_status_label") or "",
+            "dashboard_shift_reference_date": metrics.get("dashboard_shift_reference_date") or "",
         }
     except Exception as e:
         print("Error fetching metrics from remote:", e)
         return {
             "ventas_turno": 0, "pedidos_activos": 0, "pedidos_finalizados": 0,
-            "product_sales": [], "stock_levels": []
+            "product_sales": [], "stock_levels": [],
+            "dashboard_shift_start": None,
+            "dashboard_shift_end": None,
+            "dashboard_shift_label": "general",
+            "dashboard_shift_open": False,
+            "dashboard_shift_closed_at": None,
+            "dashboard_shift_status": "waiting_open",
+            "dashboard_shift_status_label": "Esperando nuevo turno",
+            "dashboard_shift_reference_date": "",
         }
 
 @router.get("/repartidor/{id}/history")

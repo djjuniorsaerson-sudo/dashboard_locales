@@ -119,44 +119,6 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
     }
   };
 
-  const handleMarkPaid = async (order) => {
-    if (isOffline) {
-      alert('El local está OFFLINE. No podés marcar pagos hasta que vuelva a estar ONLINE.');
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/v1/data/pedidos/${order.id}?installation_id=${encodeURIComponent(currentLocation?.id || '')}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          payment_method: order.payment_method || 'transferencia',
-          payment_detail: 'transferencia confirmada'
-        })
-      });
-
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.detail || 'No se pudo marcar como pagado');
-      }
-
-      const updated = await res.json();
-      const updatedOrder = updated?.data || updated;
-      setOrders((prev) => prev.map((entry) => (
-        Number(entry.id) === Number(order.id)
-          ? { ...entry, ...updatedOrder, is_paid: true, payment_detail: 'transferencia confirmada' }
-          : entry
-      )));
-      dispatchPanelSync({ modules: ['orders', 'kitchen', 'dashboard', 'cash'] });
-    } catch (error) {
-      console.error('Error marking order as paid', error);
-      alert(error.message || 'No se pudo marcar como pagado');
-    }
-  };
-
   const normalizedSearch = search.trim().toLowerCase();
   const filteredOrders = Array.isArray(orders) ? orders.filter((o) => {
     if (!normalizedSearch) return true;
@@ -180,11 +142,6 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
 
   const getItemName = (item) =>
     String(item?.product_name || item?.name || '').trim() || 'Producto';
-
-  const canMarkPaid = (order) => {
-    const method = String(order?.payment_method || '').trim().toLowerCase();
-    return ['transferencia', 'online', 'debito', 'mixto'].includes(method) && !order?.is_paid;
-  };
 
   return (
     <div className="space-y-6">
@@ -344,16 +301,6 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                   </div>
 
                   <div className="p-4 bg-black/10 flex gap-3 border-t border-white/10">
-                    {canMarkPaid(order) && (
-                      <button
-                        onClick={() => handleMarkPaid(order)}
-                        disabled={isOffline}
-                        className={`flex-1 flex items-center justify-center px-4 py-3 border rounded-2xl font-semibold transition-all ${isOffline ? 'bg-emerald-900/20 text-emerald-300/60 border-emerald-500/10 cursor-not-allowed opacity-60' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-300'}`}
-                      >
-                        <CreditCard className="w-4 h-4 mr-2" />
-                        Pagado
-                      </button>
-                    )}
                     <button 
                       onClick={() => handleCancel(order.id)}
                       disabled={isOffline}

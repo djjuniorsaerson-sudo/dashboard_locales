@@ -145,6 +145,26 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
 
   const configuredStockFactor = (portionType) => (portionType === 'mitad' ? 0.5 : 1);
 
+  const normalizeAddonEntry = (entry) => ({
+    ...entry,
+    id: Number(entry?.id || 0),
+    qty: Math.max(Number(entry?.qty || entry?.quantity || 1), 1),
+    price: Number(entry?.price || 0),
+    name: String(entry?.name || '').trim(),
+  });
+
+  const normalizeAddonCollection = (items = []) =>
+    (Array.isArray(items) ? items : [])
+      .map(normalizeAddonEntry)
+      .filter((entry) => entry.id > 0 || entry.name);
+
+  const createCartItemKey = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `cart-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  };
+
   const openCustomizer = (product) => {
     const hasAddons = (product.toppings && product.toppings.length > 0) ||
                       (product.extras && product.extras.length > 0) ||
@@ -171,9 +191,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     }
     setSelectedProduct(product);
     setProductAddons({
-      toppings: Array.isArray(item.toppings) ? item.toppings.map((entry) => ({ ...entry, qty: entry.qty || entry.quantity || 1 })) : [],
-      extras: Array.isArray(item.extras) ? item.extras.map((entry) => ({ ...entry, qty: entry.qty || entry.quantity || 1 })) : [],
-      guarniciones: Array.isArray(item.guarniciones) ? item.guarniciones.map((entry) => ({ ...entry, qty: entry.qty || entry.quantity || 1 })) : [],
+      toppings: normalizeAddonCollection(item.toppings),
+      extras: normalizeAddonCollection(item.extras),
+      guarniciones: normalizeAddonCollection(item.guarniciones),
     });
     setEditingCartItemKey(item.customKey);
     setModalPortionType(String(item.portion_type || '').trim().toLowerCase() === 'mitad' ? 'mitad' : 'completo');
@@ -211,10 +231,79 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     });
   };
 
+  const generateItemSignature = (productId, toppings, extras, guarniciones, portionType = 'completo') => {
+    const topIds = normalizeAddonCollection(toppings).sort((a, b) => a.id - b.id).map((entry) => `T${entry.id}Q${entry.qty}`).join('-');
+    const extIds = normalizeAddonCollection(extras).sort((a, b) => a.id - b.id).map((entry) => `E${entry.id}Q${entry.qty}`).join('-');
+    const guaIds = normalizeAddonCollection(guarniciones).sort((a, b) => a.id - b.id).map((entry) => `G${entry.id}Q${entry.qty}`).join('-');
+    return `${productId}|${portionType}|${topIds}|${extIds}|${guaIds}`;
+  };
+
+  const calculateAddonsPrice = (toppings, extras, guarniciones) => {
+    const normalizedToppings = normalizeAddonCollection(toppings);
+    const normalizedExtras = normalizeAddonCollection(extras);
+    const normalizedGuarniciones = normalizeAddonCollection(guarniciones);
+    let total = 0;
+    normalizedToppings.forEach((entry) => { total += Number(entry.price || 0) * (entry.qty || 1); });
+    normalizedExtras.forEach((entry) => { total += Number(entry.price || 0) * (entry.qty || 1); });
+    normalizedGuarniciones.forEach((entry) => { total += Number(entry.price || 0) * (entry.qty || 1); });
+    return total;
+  };
+
+  const buildCartItem = (
+    product,
+    toppings = [],
+    extras = [],
+    guarniciones = [],
+    portionType = 'completo',
+    overrides = {},
+  ) => {
+    const normalizedProductId = Number(overrides.product_id || product?.id || 0);
+    const normalizedToppings = normalizeAddonCollection(toppings);
+    const normalizedExtras = normalizeAddonCollection(extras);
+    const normalizedGuarniciones = normalizeAddonCollection(guarniciones);
+    const configuredName = configuredProductName(product, portionType);
+    const configuredPrice = configuredProductPrice(product, portionType);
+    const configuredFactor = configuredStockFactor(portionType);
+    const addonsTotal = calculateAddonsPrice(normalizedToppings, normalizedExtras, normalizedGuarniciones);
+    const signatureKey = generateItemSignature(
+      normalizedProductId,
+      normalizedToppings,
+      normalizedExtras,
+      normalizedGuarniciones,
+      portionType,
+    );
+
+    return {
+      product_id: normalizedProductId,
+      product_name: configuredName,
+      quantity: Math.max(Number(overrides.quantity || 1), 1),
+      price: configuredPrice + addonsTotal,
+      basePrice: configuredPrice,
+      toppings: normalizedToppings,
+      extras: normalizedExtras,
+      guarniciones: normalizedGuarniciones,
+      portion_type: portionType,
+      stock_factor: configuredFactor,
+      base_quantity: Math.max(Number(overrides.base_quantity || 1), 1),
+      bundle_quantity: Math.max(Number(overrides.bundle_quantity || 1), 1),
+      customKey: overrides.customKey || createCartItemKey(),
+      signatureKey,
+    };
+  };
+
+  const resolveCartItemProductId = (item) => {
+    const directId = Number(item?.product_id || 0);
+    if (directId > 0) {
+      return directId;
+    }
+
+    const match = products.find((entry) => normalizeText(entry.name) === normalizeText(item?.product_name || item?.name))
+      || products.find((entry) => normalizeText(productBaseName(entry)) === normalizeText(productBaseName(item?.product_name || item?.name)));
+
+    return Number(match?.id || 0);
+  };
+
   const confirmCustomProduct = () => {
-    const configuredName = configuredProductName(selectedProduct, modalPortionType);
-    const configuredPrice = configuredProductPrice(selectedProduct, modalPortionType);
-    const configuredFactor = configuredStockFactor(modalPortionType);
     if (editingCartItemKey) {
       const previousItem = cart.find((item) => item.customKey === editingCartItemKey);
       if (!previousItem) {
@@ -223,42 +312,24 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         return;
       }
 
-      const addonsTotal = calculateAddonsPrice(productAddons.toppings, productAddons.extras, productAddons.guarniciones);
-      const unitPrice = configuredPrice + addonsTotal;
-      const newCustomKey = generateCustomKey(selectedProduct.id, productAddons.toppings, productAddons.extras, productAddons.guarniciones, modalPortionType);
+      const nextItem = buildCartItem(
+        selectedProduct,
+        productAddons.toppings,
+        productAddons.extras,
+        productAddons.guarniciones,
+        modalPortionType,
+        {
+          quantity: previousItem.quantity,
+          base_quantity: previousItem.base_quantity || 1,
+          bundle_quantity: previousItem.bundle_quantity || 1,
+          customKey: previousItem.customKey,
+          product_id: selectedProduct.id,
+        },
+      );
 
-      setCart((prevCart) => {
-        const remainingItems = prevCart.filter((item) => item.customKey !== editingCartItemKey);
-        const mergedIndex = remainingItems.findIndex((item) => item.customKey === newCustomKey);
-
-        if (mergedIndex >= 0) {
-          const nextCart = [...remainingItems];
-          nextCart[mergedIndex] = {
-            ...nextCart[mergedIndex],
-            quantity: nextCart[mergedIndex].quantity + previousItem.quantity,
-          };
-          return nextCart;
-        }
-
-        return [
-          ...remainingItems,
-          {
-            ...previousItem,
-            product_id: selectedProduct.id,
-            product_name: configuredName,
-            price: unitPrice,
-            basePrice: configuredPrice,
-            toppings: productAddons.toppings,
-            extras: productAddons.extras,
-            guarniciones: productAddons.guarniciones,
-            portion_type: modalPortionType,
-            stock_factor: configuredFactor,
-            base_quantity: previousItem.base_quantity || 1,
-            bundle_quantity: previousItem.bundle_quantity || 1,
-            customKey: newCustomKey,
-          },
-        ];
-      });
+      setCart((prevCart) => prevCart.map((item) => (
+        item.customKey === editingCartItemKey ? nextItem : item
+      )));
     } else {
       addToCart(selectedProduct, productAddons.toppings, productAddons.extras, productAddons.guarniciones, modalPortionType);
     }
@@ -267,63 +338,29 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     setModalPortionType('completo');
   };
 
-  const generateCustomKey = (productId, toppings, extras, guarniciones, portionType = 'completo') => {
-      const topIds = [...toppings].sort((a,b) => a.id - b.id).map(t => `T${t.id}`).join('-');
-      const extIds = [...extras].sort((a,b) => a.id - b.id).map(e => `E${e.id}Q${e.qty||1}`).join('-');
-      const guaIds = [...guarniciones].sort((a,b) => a.id - b.id).map(g => `G${g.id}Q${g.qty||1}`).join('-');
-      return `${productId}|${portionType}|${topIds}|${extIds}|${guaIds}`;
-  };
-
-  const calculateAddonsPrice = (toppings, extras, guarniciones) => {
-      let t = 0;
-      toppings.forEach(x => t += parseFloat(x.price || 0));
-      extras.forEach(x => t += parseFloat(x.price || 0) * (x.qty || 1));
-      guarniciones.forEach(x => t += parseFloat(x.price || 0) * (x.qty || 1));
-      return t;
-  };
-
   const addToCart = (product, toppings = [], extras = [], guarniciones = [], portionType = 'completo') => {
-    const addonsTotal = calculateAddonsPrice(toppings, extras, guarniciones);
-    const basePrice = configuredProductPrice(product, portionType);
-    const unitPrice = basePrice + addonsTotal;
-    const customKey = generateCustomKey(product.id, toppings, extras, guarniciones, portionType);
-
-    const existingItemIndex = cart.findIndex(item => item.customKey === customKey);
-    
-    if (existingItemIndex >= 0) {
-      const newCart = [...cart];
-      newCart[existingItemIndex].quantity += 1;
-      setCart(newCart);
-    } else {
-      setCart([...cart, { 
-        product_id: product.id, 
-        product_name: configuredProductName(product, portionType), 
-        quantity: 1, 
-        price: unitPrice, 
-        basePrice: basePrice,
-        toppings: toppings,
-        extras: extras,
-        guarniciones: guarniciones,
-        portion_type: portionType,
-        stock_factor: configuredStockFactor(portionType),
-        base_quantity: 1,
-        bundle_quantity: 1,
-        customKey: customKey
-      }]);
-    }
+    setCart((prevCart) => [
+      ...prevCart,
+      buildCartItem(product, toppings, extras, guarniciones, portionType, { product_id: product?.id }),
+    ]);
   };
 
   const updateQuantity = (customKey, delta) => {
-    setCart(cart.map(item => {
-      if (item.customKey === customKey) {
-        const newQ = item.quantity + delta;
-        return newQ > 0 ? { ...item, quantity: newQ } : item;
+    setCart((prevCart) => prevCart.reduce((nextCart, item) => {
+      if (item.customKey !== customKey) {
+        nextCart.push(item);
+        return nextCart;
       }
-      return item;
-    }));
+
+      const newQuantity = Number(item.quantity || 0) + delta;
+      if (newQuantity > 0) {
+        nextCart.push({ ...item, quantity: newQuantity });
+      }
+      return nextCart;
+    }, []));
   };
 
-  const removeFromCart = (customKey) => setCart(cart.filter(item => item.customKey !== customKey));
+  const removeFromCart = (customKey) => setCart((prevCart) => prevCart.filter((item) => item.customKey !== customKey));
 
   const total = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const mixedTotal = ['efectivo', 'transferencia', 'debito', 'online']
@@ -362,7 +399,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       payment_method: paymentMethod,
       allow_duplicate: overrideDuplicate,
       items: cart.map(item => ({
-        product_id: item.product_id,
+        product_id: resolveCartItemProductId(item),
         product_name: item.product_name,
         quantity: item.quantity,
         base_quantity: item.base_quantity || item.quantity || 1,
@@ -375,6 +412,13 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         guarniciones: (item.guarniciones || []).map(g => ({...g, quantity: g.qty || 1}))
       }))
     };
+
+    const invalidItem = payload.items.find((item) => Number(item.product_id || 0) <= 0);
+    if (invalidItem) {
+      setLoading(false);
+      setErrorMsg(`Producto inválido: no pude resolver el producto "${invalidItem.product_name}".`);
+      return;
+    }
 
     if (paymentMethod === 'mixto') {
         const breakdown = {

@@ -19,10 +19,41 @@ export default function Dashboard({ setIsSyncing }) {
   const [qtyToAdd, setQtyToAdd] = useState('');
   const [isSavingStock, setIsSavingStock] = useState(false);
 
+  const parsePanelDateTime = (value) => {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    let parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+
+    const normalized = raw.replace(' ', 'T');
+    parsed = new Date(normalized);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (!match) {
+      return null;
+    }
+
+    const [, year, month, day, hour, minute, second = '00'] = match;
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+    );
+  };
+
   const formatShiftDateTime = (value) => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
+    const date = parsePanelDateTime(value);
+    if (!date) return '';
     return date.toLocaleString('es-AR', {
       day: '2-digit',
       month: '2-digit',
@@ -31,6 +62,44 @@ export default function Dashboard({ setIsSyncing }) {
       minute: '2-digit',
     });
   };
+
+  const formatShiftDate = (value) => {
+    const date = parsePanelDateTime(value);
+    if (!date) return '';
+    return date.toLocaleDateString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  };
+
+  const formatShiftTime = (value) => {
+    const date = parsePanelDateTime(value);
+    if (!date) return '';
+    return date.toLocaleTimeString('es-AR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const shiftReferenceDate = formatShiftDate(metrics.dashboard_shift_reference_date || metrics.dashboard_shift_start || metrics.dashboard_shift_closed_at || metrics.dashboard_shift_end);
+  const shiftLabel = metrics.dashboard_shift_label || 'general';
+  const shiftOpenedAt = formatShiftDateTime(metrics.dashboard_shift_start);
+  const shiftClosedAt = formatShiftDateTime(metrics.dashboard_shift_closed_at || metrics.dashboard_shift_end);
+  const shiftClosedHour = formatShiftTime(metrics.dashboard_shift_closed_at || metrics.dashboard_shift_end);
+  const shiftStatusLabel = metrics.dashboard_shift_status_label || (metrics.dashboard_shift_open ? 'Turno abierto' : 'Esperando nuevo turno');
+  const dashboardLeadText = metrics.dashboard_shift_open
+    ? `Viendo caja ${shiftLabel} del ${shiftReferenceDate || 'día actual'}, abierta desde ${shiftOpenedAt || '-'}`
+    : `Viendo caja ${shiftLabel} del ${shiftReferenceDate || 'último cierre'}, cerrada el ${shiftClosedAt || '-'}`;
+  const soldCardDetail = metrics.dashboard_shift_open
+    ? `Caja ${shiftLabel} · ${shiftReferenceDate || '-'} · abierta desde ${shiftOpenedAt || '-'}`
+    : `Caja ${shiftLabel} · ${shiftReferenceDate || '-'} · cerró ${shiftClosedHour || '-'}`;
+  const deliveredCardDetail = metrics.dashboard_shift_open
+    ? `Pedidos finalizados dentro de la caja ${shiftLabel}`
+    : `Caja ${shiftLabel} cerrada · esperando apertura de nuevo turno`;
+  const nextTurnoDetail = metrics.dashboard_shift_open
+    ? `Turno actual: ${shiftLabel}`
+    : `${shiftStatusLabel} · último cierre ${shiftClosedAt || '-'}`;
 
   const formatStockValue = (value) => {
     const numeric = Number(value || 0);
@@ -148,12 +217,9 @@ export default function Dashboard({ setIsSyncing }) {
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-300/80 mb-2">Resumen operativo</p>
               <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Métricas en Tiempo Real</h2>
               <p className="text-gray-400">
-                {metrics.dashboard_shift_open ? (
-                  <>Viendo datos del <span className="text-white font-semibold">turno {metrics.dashboard_shift_label || 'general'}</span> abierto desde {formatShiftDateTime(metrics.dashboard_shift_start)} en {currentLocation?.name || 'Local Central'}</>
-                ) : (
-                  <>Viendo datos del <span className="text-white font-semibold">turno {metrics.dashboard_shift_label || 'general'}</span> cerrado el {formatShiftDateTime(metrics.dashboard_shift_closed_at || metrics.dashboard_shift_end)} en {currentLocation?.name || 'Local Central'}</>
-                )}
+                {dashboardLeadText} en {currentLocation?.name || 'Local Central'}
               </p>
+              <p className="text-xs text-gray-500 mt-2">{nextTurnoDetail}</p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="rounded-2xl border border-white/10 bg-gray-950/40 px-4 py-3">
@@ -182,9 +248,7 @@ export default function Dashboard({ setIsSyncing }) {
               <div className="absolute top-0 right-0 p-4 opacity-10"><svg className="w-16 h-16 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd"/></svg></div>
               <h3 className="text-gray-400 text-sm font-semibold relative z-10 uppercase tracking-[0.16em]">Total Vendido (Turno)</h3>
               <p className="text-3xl sm:text-4xl font-black mt-3 text-white relative z-10 break-all">${metrics.ventas_turno.toLocaleString()}</p>
-              <p className="relative z-10 mt-3 text-xs text-gray-500">
-                {metrics.dashboard_shift_open ? 'Ingreso del turno abierto' : 'Ingreso del último turno cerrado'}
-              </p>
+              <p className="relative z-10 mt-3 text-xs text-gray-500">{soldCardDetail}</p>
             </div>
             
             <div className="bg-gradient-to-br from-orange-950/30 to-slate-800 p-6 rounded-3xl border border-orange-500/30 shadow-xl relative overflow-hidden ring-1 ring-orange-500/20">
@@ -206,7 +270,7 @@ export default function Dashboard({ setIsSyncing }) {
               <div className="absolute top-0 right-0 p-4 opacity-10"><svg className="w-16 h-16 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg></div>
               <h3 className="text-gray-400 text-sm font-semibold relative z-10 uppercase tracking-[0.16em]">Pedidos Entregados</h3>
               <p className="text-3xl sm:text-4xl font-black mt-3 text-emerald-400 relative z-10">{metrics.pedidos_finalizados}</p>
-              <p className="relative z-10 mt-3 text-xs text-gray-500">Pedidos finalizados dentro de este turno</p>
+              <p className="relative z-10 mt-3 text-xs text-gray-500">{deliveredCardDetail}</p>
             </div>
           </div>
 
@@ -226,11 +290,9 @@ export default function Dashboard({ setIsSyncing }) {
                     Productos Vendidos
                   </h3>
                   <p className="mt-2 text-xs text-gray-400">
-                    {metrics.dashboard_shift_open ? (
-                      <>Turno {metrics.dashboard_shift_label || 'general'} · abierto desde {formatShiftDateTime(metrics.dashboard_shift_start)}</>
-                    ) : (
-                      <>Turno {metrics.dashboard_shift_label || 'general'} · cerrado el {formatShiftDateTime(metrics.dashboard_shift_closed_at || metrics.dashboard_shift_end)}</>
-                    )}
+                    {metrics.dashboard_shift_open
+                      ? `Caja ${shiftLabel} · ${shiftReferenceDate || '-'} · abierta desde ${shiftOpenedAt || '-'}`
+                      : `Caja ${shiftLabel} · ${shiftReferenceDate || '-'} · cerró ${shiftClosedAt || '-'} · esperando apertura`}
                   </p>
                 </div>
               </div>

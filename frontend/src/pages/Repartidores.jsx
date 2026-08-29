@@ -20,7 +20,11 @@ export default function Repartidores() {
   useEffect(() => {
     const fetchRepartidores = async () => {
       try {
-        const res = await fetch(`/api/v1/data/repartidores`, {
+        if (!currentLocation?.id) {
+          setRepartidores([]);
+          return;
+        }
+        const res = await fetch(`/api/v1/data/repartidores?installation_id=${encodeURIComponent(currentLocation.id)}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -35,7 +39,11 @@ export default function Repartidores() {
     
     const fetchGlobalHistory = async () => {
       try {
-        const res = await fetch(`/api/v1/data/repartidores/history`, {
+        if (!currentLocation?.id) {
+          setGlobalHistory([]);
+          return;
+        }
+        const res = await fetch(`/api/v1/data/repartidores/history?installation_id=${encodeURIComponent(currentLocation.id)}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -157,6 +165,15 @@ export default function Repartidores() {
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
   };
 
+  const getDriverShift = (driver) => String(driver?.shift || driver?.shift_label || '-').trim() || '-';
+  const isDriverActive = (driver) => Boolean(driver?.active ?? driver?.is_active);
+  const getDriverPendingCash = (driver) => Number(
+    driver?.pending_cash
+    ?? driver?.total_to_settle
+    ?? driver?.money_total
+    ?? 0
+  );
+
   const formatDateTime = (value) => {
     if (!value) return '-';
     const date = new Date(value);
@@ -226,11 +243,11 @@ export default function Repartidores() {
                       </div>
                       <div className="min-w-0">
                         <div className="font-semibold text-white break-words">{r.name}</div>
-                        <div className="text-sm text-gray-400 mt-1">{r.shift}</div>
+                        <div className="text-sm text-gray-400 mt-1">{getDriverShift(r)}</div>
                       </div>
                     </div>
-                    <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-bold ${r.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {r.active ? 'ACTIVO' : 'INACTIVO'}
+                    <span className={`shrink-0 px-2 py-1 rounded-full text-xs font-bold ${isDriverActive(r) ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {isDriverActive(r) ? 'ACTIVO' : 'INACTIVO'}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm">
@@ -240,8 +257,8 @@ export default function Repartidores() {
                     </div>
                     <div className="bg-gray-900/60 rounded-lg p-3">
                       <div className="text-gray-500 text-xs uppercase tracking-wide">Efectivo</div>
-                      <div className={`font-semibold mt-1 ${r.pending_cash > 0 ? 'text-emerald-400' : 'text-gray-400'}`}>
-                        ${r.pending_cash.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                      <div className={`font-semibold mt-1 ${getDriverPendingCash(r) > 0 ? 'text-emerald-400' : 'text-gray-400'}`}>
+                        ${getDriverPendingCash(r).toLocaleString(undefined, {minimumFractionDigits: 2})}
                       </div>
                     </div>
                   </div>
@@ -279,10 +296,10 @@ export default function Repartidores() {
                         </div>
                         {r.name}
                       </td>
-                      <td className="px-6 py-4 text-gray-300">{r.shift}</td>
+                      <td className="px-6 py-4 text-gray-300">{getDriverShift(r)}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${r.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                          {r.active ? 'ACTIVO' : 'INACTIVO'}
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${isDriverActive(r) ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {isDriverActive(r) ? 'ACTIVO' : 'INACTIVO'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
@@ -291,8 +308,8 @@ export default function Repartidores() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <span className={`font-bold ${r.pending_cash > 0 ? 'text-emerald-400' : 'text-gray-500'}`}>
-                          ${r.pending_cash.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                        <span className={`font-bold ${getDriverPendingCash(r) > 0 ? 'text-emerald-400' : 'text-gray-500'}`}>
+                          ${getDriverPendingCash(r).toLocaleString(undefined, {minimumFractionDigits: 2})}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">

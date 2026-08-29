@@ -107,10 +107,14 @@ export default function Empleados() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!selectedEmployee?.id || !currentLocation?.id) {
+      alert('No hay un empleado o local activo seleccionado.');
+      return;
+    }
     setIsSaving(true);
     
     try {
-      const res = await fetch(`/api/v1/data/employees/${selectedEmployee.id}/novedad`, {
+      const res = await fetch(`/api/v1/data/employees/${selectedEmployee.id}/novedad?installation_id=${encodeURIComponent(currentLocation.id)}`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -118,7 +122,7 @@ export default function Empleados() {
         },
         body: JSON.stringify({
           event_type: modalType,
-          amount: formData.amount,
+          amount: Number(formData.amount || 0),
           notes: formData.notes
         })
       });
