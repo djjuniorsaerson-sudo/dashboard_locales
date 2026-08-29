@@ -131,6 +131,18 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       .replace(/^1\/2\s+/i, '')
       .trim();
 
+  const productNumericId = (productOrItem) => {
+    const externalId = Number(productOrItem?.external_id || 0);
+    if (externalId > 0) {
+      return externalId;
+    }
+    const directId = Number(productOrItem?.product_id || productOrItem?.id || 0);
+    if (directId > 0) {
+      return directId;
+    }
+    return 0;
+  };
+
   const configuredProductName = (product, portionType) => {
     const baseName = productBaseName(product);
     return portionType === 'mitad' ? `1/2 ${baseName}` : baseName;
@@ -182,7 +194,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   };
 
   const editCartItem = (item) => {
-    const product = products.find((entry) => Number(entry.id) === Number(item.product_id))
+    const product = products.find((entry) => productNumericId(entry) === Number(item.product_id))
       || products.find((entry) => normalizeText(entry.name) === normalizeText(item.product_name || item.name))
       || products.find((entry) => normalizeText(productBaseName(entry)) === normalizeText(productBaseName(item.product_name || item.name)));
     if (!product) {
@@ -257,7 +269,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     portionType = 'completo',
     overrides = {},
   ) => {
-    const normalizedProductId = Number(overrides.product_id || product?.id || 0);
+    const normalizedProductId = Number(overrides.product_id || productNumericId(product) || 0);
     const normalizedToppings = normalizeAddonCollection(toppings);
     const normalizedExtras = normalizeAddonCollection(extras);
     const normalizedGuarniciones = normalizeAddonCollection(guarniciones);
@@ -300,7 +312,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     const match = products.find((entry) => normalizeText(entry.name) === normalizeText(item?.product_name || item?.name))
       || products.find((entry) => normalizeText(productBaseName(entry)) === normalizeText(productBaseName(item?.product_name || item?.name)));
 
-    return Number(match?.id || 0);
+    return productNumericId(match);
   };
 
   const confirmCustomProduct = () => {
@@ -323,7 +335,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
           base_quantity: previousItem.base_quantity || 1,
           bundle_quantity: previousItem.bundle_quantity || 1,
           customKey: previousItem.customKey,
-          product_id: selectedProduct.id,
+          product_id: productNumericId(selectedProduct),
         },
       );
 
@@ -341,7 +353,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const addToCart = (product, toppings = [], extras = [], guarniciones = [], portionType = 'completo') => {
     setCart((prevCart) => [
       ...prevCart,
-      buildCartItem(product, toppings, extras, guarniciones, portionType, { product_id: product?.id }),
+      buildCartItem(product, toppings, extras, guarniciones, portionType, { product_id: productNumericId(product) }),
     ]);
   };
 
