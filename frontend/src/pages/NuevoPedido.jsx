@@ -261,6 +261,14 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     return total;
   };
 
+  const formatAddonSummary = (items = [], multiplier = 1) =>
+    normalizeAddonCollection(items)
+      .map((entry) => {
+        const effectiveQty = Math.max(Number(entry.qty || 1), 1) * Math.max(Number(multiplier || 1), 1);
+        return `${effectiveQty > 1 ? `${effectiveQty}x ` : ''}${entry.name}`;
+      })
+      .join(', ');
+
   const buildCartItem = (
     product,
     toppings = [],
@@ -689,9 +697,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                   >
                     <div className="flex-1">
                       <p className="font-bold text-gray-100 text-lg">{item.product_name}</p>
-                      {item.toppings.length > 0 && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-emerald-500"></span> {item.toppings.map(t=>t.name).join(', ')}</p>}
-                      {item.extras.length > 0 && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-blue-500"></span> {item.extras.map(e=>`${e.qty > 1 ? e.qty+'x ' : ''}${e.name}`).join(', ')}</p>}
-                      {item.guarniciones.length > 0 && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-orange-500"></span> {item.guarniciones.map(g=>`${g.qty > 1 ? g.qty+'x ' : ''}${g.name}`).join(', ')}</p>}
+                      {item.toppings.length > 0 && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-emerald-500"></span> {formatAddonSummary(item.toppings, item.quantity)}</p>}
+                      {item.extras.length > 0 && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-blue-500"></span> {formatAddonSummary(item.extras, item.quantity)}</p>}
+                      {item.guarniciones.length > 0 && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-orange-500"></span> {formatAddonSummary(item.guarniciones, item.quantity)}</p>}
                       <p className="text-sm font-black text-emerald-400 mt-2">${item.price.toLocaleString()}</p>
                     </div>
                     <div className="flex w-full sm:w-auto flex-row sm:flex-col items-center sm:items-end justify-between gap-3 sm:ml-2">
