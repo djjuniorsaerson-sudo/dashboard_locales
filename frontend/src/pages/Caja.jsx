@@ -391,12 +391,23 @@ export default function Caja() {
     const totalWithdrawals = Number(dayReport.total_salidas || 0);
     const expectedCash = openingBalance + Number(dayReport.efectivo || 0) - totalWithdrawals;
     const activeShift = dayReport.shifts.find((shift) => !shift.end_time) || dayReport.shifts[dayReport.shifts.length - 1] || null;
+    const movementTotals = dayReport.shifts.reduce((acc, shift) => {
+      (shift.movimientos || []).forEach((movement) => {
+        const normalizedType = normalizeMovementType(movement?.type || movement?.movement_type);
+        const amount = Math.abs(Number(movement?.amount || 0));
+        if (normalizedType === 'retiro') acc.withdrawals += amount;
+        else if (normalizedType === 'vale' || normalizedType === 'adelanto') acc.vouchers += amount;
+        else if (normalizedType === 'perdida') acc.losses += amount;
+      });
+      return acc;
+    }, { withdrawals: 0, vouchers: 0, losses: 0 });
     return {
       openingBalance,
       totalSales,
       totalWithdrawals,
       expectedCash,
       activeShift,
+      ...movementTotals,
     };
   };
 
@@ -410,6 +421,46 @@ export default function Caja() {
     }
     return 'Turno';
   };
+
+  const normalizeMovementType = (value) => String(value || '').trim().toLowerCase();
+
+  const movementTone = (value) => {
+    const normalized = normalizeMovementType(value);
+    if (normalized === 'saldo_inicial') return 'text-blue-300 bg-blue-500/10 border-blue-500/20';
+    if (normalized === 'retiro') return 'text-amber-300 bg-amber-500/10 border-amber-500/20';
+    if (normalized === 'vale' || normalized === 'adelanto') return 'text-fuchsia-300 bg-fuchsia-500/10 border-fuchsia-500/20';
+    if (normalized === 'perdida') return 'text-red-300 bg-red-500/10 border-red-500/20';
+    return 'text-gray-300 bg-white/[0.04] border-white/10';
+  };
+
+  const movementLabel = (movement) => {
+    const normalized = normalizeMovementType(movement?.type || movement?.movement_type);
+    if (normalized === 'saldo_inicial') return 'Inicio de caja';
+    if (normalized === 'retiro') return 'Retiro de caja';
+    if (normalized === 'vale' || normalized === 'adelanto') return 'Vale a empleado';
+    if (normalized === 'perdida') return 'Pérdida';
+    if (normalized === 'reset_turno') return 'Cierre de turno';
+    return normalized ? normalized.replaceAll('_', ' ') : 'Movimiento';
+  };
+
+  const movementDescription = (movement) => {
+    const note = String(movement?.notes || '').trim();
+    if (note && !note.toLowerCase().startsWith('sin observaciones')) {
+      return note;
+    }
+    const employeeName = String(movement?.employee_name || '').trim();
+    if (employeeName) {
+      return employeeName;
+    }
+    const normalized = normalizeMovementType(movement?.type || movement?.movement_type);
+    if (normalized === 'saldo_inicial') return 'Apertura del turno';
+    if (normalized === 'retiro') return 'Salida manual de dinero';
+    if (normalized === 'vale' || normalized === 'adelanto') return 'Descuento para empleado';
+    if (normalized === 'perdida') return 'Pérdida registrada';
+    return 'Sin detalle';
+  };
+
+  const shiftExpectedCash = (shift) => Number(shift?.saldo_inicial || 0) + Number(shift?.efectivo || 0) - Number(shift?.salidas || 0);
 
   const totalPages = Math.max(1, Math.ceil(reportes.length / REPORTS_PER_PAGE));
   const paginatedReportes = reportes.slice(
@@ -496,19 +547,19 @@ export default function Caja() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="bg-gray-900/45 border border-white/10 rounded-2xl px-4 py-3 min-w-0">
-                          <p className="text-xs font-bold uppercase tracking-wide text-blue-400">Estado de caja ahora</p>
+                          <p className="text-xs font-bold uppercase tracking-wide text-blue-400">Estado de la caja</p>
                           <p className="mt-1 text-lg font-bold text-white">
                             {summary.activeShift && !summary.activeShift.end_time ? 'Caja abierta' : 'Caja cerrada'}
                           </p>
                           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-400">
                             <div>
-                              <span className="block text-gray-500">Turno actual</span>
+                              <span className="block text-gray-500">Turno</span>
                               <span className="text-gray-200 font-semibold">
                                 {summary.activeShift ? formatShiftLabel(summary.activeShift) : '-'}
                               </span>
                             </div>
                             <div>
-                              <span className="block text-gray-500">Apertura</span>
+                              <span className="block text-gray-500">{summary.activeShift && !summary.activeShift.end_time ? 'Abrió' : 'Última apertura'}</span>
                               <span className="text-gray-200 font-semibold">
                                 {summary.activeShift ? formatTime(summary.activeShift.start_time) : '-'}
                               </span>
@@ -517,22 +568,22 @@ export default function Caja() {
                         </div>
 
                         <div className="bg-gray-900/45 border border-white/10 rounded-2xl px-4 py-3 min-w-0">
-                          <p className="text-xs font-bold uppercase tracking-wide text-emerald-400">Resumen rápido</p>
+                          <p className="text-xs font-bold uppercase tracking-wide text-emerald-400">Resumen simple</p>
                           <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
                             <div>
-                              <span className="block text-gray-500 text-xs">Saldo inicial</span>
+                              <span className="block text-gray-500 text-xs">Caja inicial</span>
                               <span className="text-white font-bold">{formatMoney(summary.openingBalance)}</span>
                             </div>
                             <div>
-                              <span className="block text-gray-500 text-xs">Cobrado hoy</span>
-                              <span className="text-emerald-400 font-bold">{formatMoney(summary.totalSales)}</span>
+                              <span className="block text-gray-500 text-xs">Entró por ventas</span>
+                              <span className="text-emerald-400 font-bold">+{formatMoney(summary.totalSales)}</span>
                             </div>
                             <div>
-                              <span className="block text-gray-500 text-xs">Salidas</span>
+                              <span className="block text-gray-500 text-xs">Salió de caja</span>
                               <span className="text-red-400 font-bold">-{formatMoney(summary.totalWithdrawals)}</span>
                             </div>
                             <div>
-                              <span className="block text-gray-500 text-xs">Efectivo esperado</span>
+                              <span className="block text-gray-500 text-xs">Debería haber</span>
                               <span className="text-blue-300 font-bold">{formatMoney(summary.expectedCash)}</span>
                             </div>
                           </div>
@@ -543,19 +594,19 @@ export default function Caja() {
 
                   <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 xl:min-w-[620px]">
                     <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border border-white/10">
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Saldo inicial</p>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Caja inicial</p>
                       <p className="text-base sm:text-lg font-bold text-white mt-1 break-words">{formatMoney(summary.openingBalance)}</p>
                     </div>
                     <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border border-white/10">
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Cobrado hoy</p>
-                      <p className="text-base sm:text-lg font-bold text-emerald-500 mt-1 break-words">{formatMoney(summary.totalSales)}</p>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Entró por ventas</p>
+                      <p className="text-base sm:text-lg font-bold text-emerald-500 mt-1 break-words">+{formatMoney(summary.totalSales)}</p>
                     </div>
                     <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border border-white/10">
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Salidas</p>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">Salió de caja</p>
                       <p className="text-base sm:text-lg font-bold text-red-400 mt-1 break-words">-{formatMoney(summary.totalWithdrawals)}</p>
                     </div>
                     <div className="bg-gray-900/45 px-3 sm:px-4 py-3 rounded-2xl border-2 border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
-                      <p className="text-xs text-blue-400 font-bold uppercase tracking-wide">Efectivo esperado</p>
+                      <p className="text-xs text-blue-400 font-bold uppercase tracking-wide">Debería haber en efectivo</p>
                       <p className="text-lg sm:text-xl font-black text-white mt-1 break-words">{formatMoney(summary.expectedCash)}</p>
                     </div>
                   </div>
@@ -569,7 +620,7 @@ export default function Caja() {
                 <div className="p-6 bg-gray-800/50 border-t border-gray-700">
                   
                   {/* Desglose de Métodos de Pago del Día */}
-                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Ventas por medio de pago</h4>
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Ventas por forma de pago</h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
                     <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
                       <div className="flex items-center text-green-400 mb-1">
@@ -608,31 +659,53 @@ export default function Caja() {
                     </div>
                   </div>
 
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Salidas de caja</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-amber-300">Retiros</p>
+                      <p className="mt-2 text-2xl font-black text-white">{formatMoney(summary.withdrawals)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-fuchsia-300">Vales a empleados</p>
+                      <p className="mt-2 text-2xl font-black text-white">{formatMoney(summary.vouchers)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-red-300">Pérdidas</p>
+                      <p className="mt-2 text-2xl font-black text-white">{formatMoney(summary.losses)}</p>
+                    </div>
+                  </div>
+
                   {/* Turnos */}
                   <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Turnos del día</h4>
                   <div className="space-y-4">
                     {dayReport.shifts.map((shift, idx) => (
                       <div key={idx} className="bg-gray-900 rounded-xl p-4 border border-gray-700">
-                        <div className="flex flex-col md:flex-row justify-between mb-4 pb-4 border-b border-gray-800">
+                        <div className="flex flex-col gap-4 mb-4 pb-4 border-b border-gray-800">
                           <div>
                             <h5 className="font-bold text-lg text-white">{formatShiftLabel(shift)}</h5>
-                            <p className="text-xs text-gray-500">
-                              Apertura: {formatTime(shift.start_time)} 
-                              {shift.end_time ? ` - Cierre: ${formatTime(shift.end_time)}` : ' - Caja abierta'}
-                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              <span className="rounded-full bg-white/[0.04] px-3 py-1 text-gray-300">Abrió: {formatTime(shift.start_time)}</span>
+                              <span className="rounded-full bg-white/[0.04] px-3 py-1 text-gray-300">
+                                {shift.end_time ? `Cerró: ${formatTime(shift.end_time)}` : 'Todavía abierto'}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex gap-4 mt-2 md:mt-0">
-                            <div className="text-right">
-                              <span className="block text-xs text-gray-500">Saldo Inicial</span>
-                              <span className="font-bold text-gray-300">{formatMoney(shift.saldo_inicial)}</span>
+                          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                              <span className="block text-xs text-gray-500">Caja inicial</span>
+                              <span className="font-bold text-gray-100">{formatMoney(shift.saldo_inicial)}</span>
                             </div>
-                            <div className="text-right">
-                              <span className="block text-xs text-emerald-500/70">Ingresos</span>
-                              <span className="font-bold text-emerald-400">{formatMoney(shift.ingresos)}</span>
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                              <span className="block text-xs text-gray-500">Entró por ventas</span>
+                              <span className="font-bold text-emerald-400">+{formatMoney(shift.ingresos)}</span>
                             </div>
-                            <div className="text-right">
-                              <span className="block text-xs text-red-500/70">Retiros/Salidas</span>
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                              <span className="block text-xs text-gray-500">Salió de caja</span>
                               <span className="font-bold text-red-400">-{formatMoney(shift.salidas)}</span>
+                            </div>
+                            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-3">
+                              <span className="block text-xs text-blue-300">Debería haber</span>
+                              <span className="font-bold text-white">{formatMoney(shiftExpectedCash(shift))}</span>
                             </div>
                           </div>
                         </div>
@@ -663,16 +736,16 @@ export default function Caja() {
                             <div className="space-y-2">
                               {shift.movimientos.map((mov, midx) => (
                                 <div key={midx} className="bg-gray-800 p-3 rounded-lg border border-gray-700 text-sm flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <p className="text-gray-200 uppercase text-xs font-bold tracking-wide truncate" title={mov.notes || mov.type}>
-                                      {mov.type}
-                                    </p>
-                                    <p className="text-xs text-gray-500 truncate" title={mov.notes || 'Sin observaciones'}>
-                                      {mov.notes || 'Sin observaciones'}
+                                  <div className="min-w-0 flex-1">
+                                    <div className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${movementTone(mov.type)}`}>
+                                      {movementLabel(mov)}
+                                    </div>
+                                    <p className="mt-2 text-sm text-gray-100 break-words" title={movementDescription(mov)}>
+                                      {movementDescription(mov)}
                                     </p>
                                   </div>
-                                  <span className={`font-bold whitespace-nowrap ${mov.type === 'saldo_inicial' ? 'text-blue-400' : 'text-red-400'}`}>
-                                    {mov.type === 'saldo_inicial' ? '' : '-'}{formatMoney(mov.amount)}
+                                  <span className={`font-bold whitespace-nowrap ${normalizeMovementType(mov.type) === 'saldo_inicial' ? 'text-blue-400' : 'text-red-400'}`}>
+                                    {normalizeMovementType(mov.type) === 'saldo_inicial' ? '+' : '-'}{formatMoney(Math.abs(Number(mov.amount || 0)))}
                                   </span>
                                 </div>
                               ))}

@@ -31,8 +31,8 @@ export default function LocationSyncBanner({
             {isOffline ? (offlineMessage || statusMeta.detail) : (onlineMessage || statusMeta.detail)}
           </p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/70">
-            <span className="rounded-full bg-black/20 px-3 py-1">Última sync: {formatRelativeDate(location.lastSyncAt)}</span>
-            <span className="rounded-full bg-black/20 px-3 py-1">Último heartbeat: {formatRelativeDate(location.lastHealthCheck)}</span>
+            <span className="rounded-full bg-black/20 px-3 py-1">Panel actualizado: {formatRelativeDate(location.lastSyncAt)}</span>
+            <span className="rounded-full bg-black/20 px-3 py-1">Último contacto con Yummy: {formatRelativeDate(location.lastHealthCheck)}</span>
             {location.lastSeenIp && <span className="rounded-full bg-black/20 px-3 py-1">IP: {location.lastSeenIp}</span>}
           </div>
         </div>
