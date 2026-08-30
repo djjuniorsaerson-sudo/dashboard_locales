@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Products from './pages/Products';
@@ -49,6 +49,13 @@ function MainLayout() {
   const statusMeta = getLocationStatusMeta(currentLocation, isSyncing);
   const pendingActionsCount = Number(currentLocation?.pendingActionsCount || 0);
   const pendingActionsSummary = currentLocation?.pendingActionsSummary || {};
+
+  useEffect(() => {
+    const locationName = String(currentLocation?.name || '').trim();
+    document.title = locationName
+      ? `Panel Central - ${locationName}`
+      : 'Panel Central - Sin local';
+  }, [currentLocation?.name]);
 
   const navButtonClass = (view, accent = 'blue') => {
     const active = currentView === view;

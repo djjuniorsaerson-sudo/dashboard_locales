@@ -12,6 +12,7 @@ export default function Caja() {
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedDays, setExpandedDays] = useState({});
+  const [expandedShifts, setExpandedShifts] = useState({});
   const [movementPages, setMovementPages] = useState({});
   const [employees, setEmployees] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -214,6 +215,7 @@ export default function Caja() {
         setReportes(validData);
         setCurrentPage(1);
         setMovementPages({});
+        setExpandedShifts({});
         if (validData.length > 0) {
           setExpandedDays({ [validData[0].date]: true });
         }
@@ -465,10 +467,17 @@ export default function Caja() {
 
   const shiftExpectedCash = (shift) => Number(shift?.saldo_inicial || 0) + Number(shift?.efectivo || 0) - Number(shift?.salidas || 0);
   const getShiftPageKey = (dayDate, shift, shiftIndex) => `${dayDate}::${shift?.shift_id || shift?.shift_label || shift?.start_time || shiftIndex}`;
+  const getShiftExpandKey = (dayDate, shift, shiftIndex) => `${dayDate}::${shift?.shift_id || shift?.shift_label || shift?.start_time || shiftIndex}`;
   const setShiftPage = (pageKey, nextPage) => {
     setMovementPages((current) => ({
       ...current,
       [pageKey]: Math.max(1, nextPage),
+    }));
+  };
+  const toggleShift = (shiftKey) => {
+    setExpandedShifts((current) => ({
+      ...current,
+      [shiftKey]: !current[shiftKey],
     }));
   };
 
@@ -656,6 +665,8 @@ export default function Caja() {
                   <div className="space-y-4">
                     {dayReport.shifts.map((shift, idx) => {
                       const pageKey = getShiftPageKey(dayReport.date, shift, idx);
+                      const shiftExpandKey = getShiftExpandKey(dayReport.date, shift, idx);
+                      const isShiftExpanded = Boolean(expandedShifts[shiftExpandKey]);
                       const totalMovements = shift.movimientos.length;
                       const totalMovementPages = Math.max(1, Math.ceil(totalMovements / SHIFT_MOVEMENTS_PER_PAGE));
                       const currentMovementPage = Math.min(movementPages[pageKey] || 1, totalMovementPages);
@@ -664,108 +675,127 @@ export default function Caja() {
                         currentMovementPage * SHIFT_MOVEMENTS_PER_PAGE,
                       );
                       return (
-                      <div key={pageKey} className="bg-gray-900 rounded-xl p-4 border border-gray-700">
-                        <div className="flex flex-col gap-4 mb-4 pb-4 border-b border-gray-800">
-                          <div>
+                      <div key={pageKey} className="bg-gray-900 rounded-xl border border-gray-700 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleShift(shiftExpandKey)}
+                          className="flex w-full items-center justify-between gap-4 p-4 text-left transition hover:bg-white/[0.03]"
+                        >
+                          <div className="min-w-0">
                             <h5 className="font-bold text-lg text-white">{formatShiftLabel(shift)}</h5>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs">
                               <span className="rounded-full bg-white/[0.04] px-3 py-1 text-gray-300">Abrió: {formatTime(shift.start_time)}</span>
                               <span className="rounded-full bg-white/[0.04] px-3 py-1 text-gray-300">
                                 {shift.end_time ? `Cerró: ${formatTime(shift.end_time)}` : 'Todavía abierto'}
                               </span>
+                              <span className={`rounded-full px-3 py-1 font-semibold ${shift.end_time ? 'bg-blue-500/10 text-blue-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
+                                {shift.end_time ? 'Caja cerrada' : 'Caja abierta'}
+                              </span>
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                              <span className="block text-xs text-gray-500">Caja inicial</span>
-                              <span className="font-bold text-gray-100">{formatMoney(shift.saldo_inicial)}</span>
-                            </div>
-                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                              <span className="block text-xs text-gray-500">Entró por ventas</span>
-                              <span className="font-bold text-emerald-400">+{formatMoney(shift.ingresos)}</span>
-                            </div>
-                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                              <span className="block text-xs text-gray-500">Salió de caja</span>
-                              <span className="font-bold text-red-400">-{formatMoney(shift.salidas)}</span>
-                            </div>
-                            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-3">
-                              <span className="block text-xs text-blue-300">Debería haber</span>
-                              <span className="font-bold text-white">{formatMoney(shiftExpectedCash(shift))}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="hidden text-sm text-gray-400 md:block">
+                              {isShiftExpanded ? 'Ocultar detalle' : 'Ver detalle'}
+                            </span>
+                            <div className={`rounded-lg p-2 ${isShiftExpanded ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                              <svg className={`w-5 h-5 transform transition-transform ${isShiftExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                             </div>
                           </div>
-                        </div>
+                        </button>
 
-                        <div className="mb-4 flex flex-wrap gap-2">
-                          {shift.end_time && (
-                            <button
-                              type="button"
-                              onClick={() => reprintShift(dayReport, shift)}
-                              className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-300 transition hover:bg-blue-500/20"
-                            >
-                              Reimprimir cierre
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => deleteShift(dayReport, shift)}
-                            className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/20"
-                          >
-                            Borrar turno
-                          </button>
-                        </div>
-
-                        {/* Movimientos del turno */}
-                        {shift.movimientos.length > 0 ? (
-                          <div>
-                            <p className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Movimientos del turno</p>
-                            <div className="space-y-2">
-                              {visibleMovements.map((mov, midx) => (
-                                <div key={midx} className="bg-gray-800 p-3 rounded-lg border border-gray-700 text-sm flex items-center justify-between gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <div className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${movementTone(mov.type)}`}>
-                                      {movementLabel(mov)}
-                                    </div>
-                                    <p className="mt-2 text-sm text-gray-100 break-words" title={movementDescription(mov)}>
-                                      {movementDescription(mov)}
-                                    </p>
-                                  </div>
-                                  <span className={`font-bold whitespace-nowrap ${normalizeMovementType(mov.type) === 'saldo_inicial' ? 'text-blue-400' : 'text-red-400'}`}>
-                                    {normalizeMovementType(mov.type) === 'saldo_inicial' ? '+' : '-'}{formatMoney(Math.abs(Number(mov.amount || 0)))}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                            {totalMovements > SHIFT_MOVEMENTS_PER_PAGE && (
-                              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-xs text-gray-500">
-                                  Mostrando {((currentMovementPage - 1) * SHIFT_MOVEMENTS_PER_PAGE) + 1} - {Math.min(currentMovementPage * SHIFT_MOVEMENTS_PER_PAGE, totalMovements)} de {totalMovements} movimientos
-                                </p>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setShiftPage(pageKey, currentMovementPage - 1)}
-                                    disabled={currentMovementPage === 1}
-                                    className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    Anterior
-                                  </button>
-                                  <span className="text-xs font-semibold text-gray-400">
-                                    Página {currentMovementPage} de {totalMovementPages}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setShiftPage(pageKey, currentMovementPage + 1)}
-                                    disabled={currentMovementPage === totalMovementPages}
-                                    className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
-                                  >
-                                    Siguiente
-                                  </button>
-                                </div>
+                        {isShiftExpanded && (
+                          <div className="border-t border-gray-800 p-4">
+                            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-4 pb-4 border-b border-gray-800">
+                              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                                <span className="block text-xs text-gray-500">Caja inicial</span>
+                                <span className="font-bold text-gray-100">{formatMoney(shift.saldo_inicial)}</span>
                               </div>
+                              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                                <span className="block text-xs text-gray-500">Entró por ventas</span>
+                                <span className="font-bold text-emerald-400">+{formatMoney(shift.ingresos)}</span>
+                              </div>
+                              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                                <span className="block text-xs text-gray-500">Salió de caja</span>
+                                <span className="font-bold text-red-400">-{formatMoney(shift.salidas)}</span>
+                              </div>
+                              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-3">
+                                <span className="block text-xs text-blue-300">Debería haber</span>
+                                <span className="font-bold text-white">{formatMoney(shiftExpectedCash(shift))}</span>
+                              </div>
+                            </div>
+
+                            <div className="mb-4 flex flex-wrap gap-2">
+                              {shift.end_time && (
+                                <button
+                                  type="button"
+                                  onClick={() => reprintShift(dayReport, shift)}
+                                  className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-300 transition hover:bg-blue-500/20"
+                                >
+                                  Reimprimir cierre
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => deleteShift(dayReport, shift)}
+                                className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-500/20"
+                              >
+                                Borrar turno
+                              </button>
+                            </div>
+
+                            {shift.movimientos.length > 0 ? (
+                              <div>
+                                <p className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Movimientos del turno</p>
+                                <div className="space-y-2">
+                                  {visibleMovements.map((mov, midx) => (
+                                    <div key={midx} className="bg-gray-800 p-3 rounded-lg border border-gray-700 text-sm flex items-center justify-between gap-3">
+                                      <div className="min-w-0 flex-1">
+                                        <div className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${movementTone(mov.type)}`}>
+                                          {movementLabel(mov)}
+                                        </div>
+                                        <p className="mt-2 text-sm text-gray-100 break-words" title={movementDescription(mov)}>
+                                          {movementDescription(mov)}
+                                        </p>
+                                      </div>
+                                      <span className={`font-bold whitespace-nowrap ${normalizeMovementType(mov.type) === 'saldo_inicial' ? 'text-blue-400' : 'text-red-400'}`}>
+                                        {normalizeMovementType(mov.type) === 'saldo_inicial' ? '+' : '-'}{formatMoney(Math.abs(Number(mov.amount || 0)))}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                                {totalMovements > SHIFT_MOVEMENTS_PER_PAGE && (
+                                  <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <p className="text-xs text-gray-500">
+                                      Mostrando {((currentMovementPage - 1) * SHIFT_MOVEMENTS_PER_PAGE) + 1} - {Math.min(currentMovementPage * SHIFT_MOVEMENTS_PER_PAGE, totalMovements)} de {totalMovements} movimientos
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setShiftPage(pageKey, currentMovementPage - 1)}
+                                        disabled={currentMovementPage === 1}
+                                        className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        Anterior
+                                      </button>
+                                      <span className="text-xs font-semibold text-gray-400">
+                                        Página {currentMovementPage} de {totalMovementPages}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setShiftPage(pageKey, currentMovementPage + 1)}
+                                        disabled={currentMovementPage === totalMovementPages}
+                                        className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        Siguiente
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-600 italic">Sin movimientos registrados en este turno.</p>
                             )}
                           </div>
-                        ) : (
-                          <p className="text-xs text-gray-600 italic">Sin movimientos registrados en este turno.</p>
                         )}
                       </div>
                     )})}
