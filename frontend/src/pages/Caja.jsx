@@ -6,11 +6,13 @@ import { useModal } from '../context/ModalContext';
 
 export default function Caja() {
   const REPORTS_PER_PAGE = 5;
+  const SHIFT_MOVEMENTS_PER_PAGE = 4;
   const { token, currentLocation, fetchLocations } = useAuth();
   const { showAlert, showConfirm } = useModal();
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedDays, setExpandedDays] = useState({});
+  const [movementPages, setMovementPages] = useState({});
   const [employees, setEmployees] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -211,6 +213,7 @@ export default function Caja() {
         const validData = (Array.isArray(data) ? data : []).filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(String(row?.date || '').trim()));
         setReportes(validData);
         setCurrentPage(1);
+        setMovementPages({});
         if (validData.length > 0) {
           setExpandedDays({ [validData[0].date]: true });
         }
@@ -461,6 +464,13 @@ export default function Caja() {
   };
 
   const shiftExpectedCash = (shift) => Number(shift?.saldo_inicial || 0) + Number(shift?.efectivo || 0) - Number(shift?.salidas || 0);
+  const getShiftPageKey = (dayDate, shift, shiftIndex) => `${dayDate}::${shift?.shift_id || shift?.shift_label || shift?.start_time || shiftIndex}`;
+  const setShiftPage = (pageKey, nextPage) => {
+    setMovementPages((current) => ({
+      ...current,
+      [pageKey]: Math.max(1, nextPage),
+    }));
+  };
 
   const totalPages = Math.max(1, Math.ceil(reportes.length / REPORTS_PER_PAGE));
   const paginatedReportes = reportes.slice(
@@ -538,55 +548,24 @@ export default function Caja() {
                     <div className={`p-2 rounded-lg mt-1 ${expandedDays[dayReport.date] ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
                       <svg className={`w-6 h-6 transform transition-transform ${expandedDays[dayReport.date] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                     </div>
-                    <div className="space-y-4 min-w-0">
+                    <div className="min-w-0">
                       <div>
                         <h3 className="text-lg sm:text-xl font-bold text-white capitalize leading-tight">{formatDateLabel(dayReport.date)}</h3>
                         <p className="text-sm text-gray-400">{dayReport.shifts.length} turnos registrados</p>
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="bg-gray-900/45 border border-white/10 rounded-2xl px-4 py-3 min-w-0">
-                          <p className="text-xs font-bold uppercase tracking-wide text-blue-400">Estado de la caja</p>
-                          <p className="mt-1 text-lg font-bold text-white">
-                            {summary.activeShift && !summary.activeShift.end_time ? 'Caja abierta' : 'Caja cerrada'}
-                          </p>
-                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-400">
-                            <div>
-                              <span className="block text-gray-500">Turno</span>
-                              <span className="text-gray-200 font-semibold">
-                                {summary.activeShift ? formatShiftLabel(summary.activeShift) : '-'}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="block text-gray-500">{summary.activeShift && !summary.activeShift.end_time ? 'Abrió' : 'Última apertura'}</span>
-                              <span className="text-gray-200 font-semibold">
-                                {summary.activeShift ? formatTime(summary.activeShift.start_time) : '-'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="bg-gray-900/45 border border-white/10 rounded-2xl px-4 py-3 min-w-0">
-                          <p className="text-xs font-bold uppercase tracking-wide text-emerald-400">Resumen simple</p>
-                          <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <span className="block text-gray-500 text-xs">Caja inicial</span>
-                              <span className="text-white font-bold">{formatMoney(summary.openingBalance)}</span>
-                            </div>
-                            <div>
-                              <span className="block text-gray-500 text-xs">Entró por ventas</span>
-                              <span className="text-emerald-400 font-bold">+{formatMoney(summary.totalSales)}</span>
-                            </div>
-                            <div>
-                              <span className="block text-gray-500 text-xs">Salió de caja</span>
-                              <span className="text-red-400 font-bold">-{formatMoney(summary.totalWithdrawals)}</span>
-                            </div>
-                            <div>
-                              <span className="block text-gray-500 text-xs">Debería haber</span>
-                              <span className="text-blue-300 font-bold">{formatMoney(summary.expectedCash)}</span>
-                            </div>
-                          </div>
-                        </div>
+                      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                        <span className={`rounded-full border px-3 py-1 font-bold ${summary.activeShift && !summary.activeShift.end_time ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-blue-500/30 bg-blue-500/10 text-blue-300'}`}>
+                          {summary.activeShift && !summary.activeShift.end_time ? 'Caja abierta' : 'Caja cerrada'}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-gray-300">
+                          {summary.activeShift ? formatShiftLabel(summary.activeShift) : 'Sin turno'}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-gray-300">
+                          Abrió {summary.activeShift ? formatTime(summary.activeShift.start_time) : '-'}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-gray-300">
+                          {summary.activeShift?.end_time ? `Cerró ${formatTime(summary.activeShift.end_time)}` : 'Todavía abierto'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -675,8 +654,17 @@ export default function Caja() {
                   {/* Turnos */}
                   <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3">Turnos del día</h4>
                   <div className="space-y-4">
-                    {dayReport.shifts.map((shift, idx) => (
-                      <div key={idx} className="bg-gray-900 rounded-xl p-4 border border-gray-700">
+                    {dayReport.shifts.map((shift, idx) => {
+                      const pageKey = getShiftPageKey(dayReport.date, shift, idx);
+                      const totalMovements = shift.movimientos.length;
+                      const totalMovementPages = Math.max(1, Math.ceil(totalMovements / SHIFT_MOVEMENTS_PER_PAGE));
+                      const currentMovementPage = Math.min(movementPages[pageKey] || 1, totalMovementPages);
+                      const visibleMovements = shift.movimientos.slice(
+                        (currentMovementPage - 1) * SHIFT_MOVEMENTS_PER_PAGE,
+                        currentMovementPage * SHIFT_MOVEMENTS_PER_PAGE,
+                      );
+                      return (
+                      <div key={pageKey} className="bg-gray-900 rounded-xl p-4 border border-gray-700">
                         <div className="flex flex-col gap-4 mb-4 pb-4 border-b border-gray-800">
                           <div>
                             <h5 className="font-bold text-lg text-white">{formatShiftLabel(shift)}</h5>
@@ -731,7 +719,7 @@ export default function Caja() {
                           <div>
                             <p className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Movimientos del turno</p>
                             <div className="space-y-2">
-                              {shift.movimientos.map((mov, midx) => (
+                              {visibleMovements.map((mov, midx) => (
                                 <div key={midx} className="bg-gray-800 p-3 rounded-lg border border-gray-700 text-sm flex items-center justify-between gap-3">
                                   <div className="min-w-0 flex-1">
                                     <div className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${movementTone(mov.type)}`}>
@@ -747,12 +735,40 @@ export default function Caja() {
                                 </div>
                               ))}
                             </div>
+                            {totalMovements > SHIFT_MOVEMENTS_PER_PAGE && (
+                              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-xs text-gray-500">
+                                  Mostrando {((currentMovementPage - 1) * SHIFT_MOVEMENTS_PER_PAGE) + 1} - {Math.min(currentMovementPage * SHIFT_MOVEMENTS_PER_PAGE, totalMovements)} de {totalMovements} movimientos
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShiftPage(pageKey, currentMovementPage - 1)}
+                                    disabled={currentMovementPage === 1}
+                                    className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    Anterior
+                                  </button>
+                                  <span className="text-xs font-semibold text-gray-400">
+                                    Página {currentMovementPage} de {totalMovementPages}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShiftPage(pageKey, currentMovementPage + 1)}
+                                    disabled={currentMovementPage === totalMovementPages}
+                                    className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    Siguiente
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <p className="text-xs text-gray-600 italic">Sin movimientos registrados en este turno.</p>
                         )}
                       </div>
-                    ))}
+                    )})}
                   </div>
 
                 </div>
