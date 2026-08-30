@@ -300,6 +300,82 @@ def _refresh_cashbox_snapshot(db: Session, install) -> None:
         pass
 
 
+def _summarize_snapshot_shift_movements(movements: list[dict]):
+    totals = {
+        "withdrawals_total": 0.0,
+        "vouchers_total": 0.0,
+        "losses_total": 0.0,
+    }
+    normalized_movements = []
+    for movement in list(movements or []):
+        movement_type = str(movement.get("type") or movement.get("movement_type") or "").strip().lower()
+        amount = abs(float(movement.get("amount") or 0))
+        if movement_type == "retiro":
+            totals["withdrawals_total"] += amount
+        elif movement_type in {"vale", "adelanto"}:
+            totals["vouchers_total"] += amount
+        elif movement_type == "perdida":
+            totals["losses_total"] += amount
+        normalized_movements.append({
+            "movement_type": movement.get("type") or movement.get("movement_type") or "",
+            "type": movement.get("type") or movement.get("movement_type") or "",
+            "amount": amount,
+            "notes": movement.get("notes") or "",
+            "created_at": movement.get("created_at") or movement.get("movement_date") or "",
+            "movement_date": movement.get("movement_date") or "",
+            "employee_name": movement.get("employee_name") or "",
+        })
+    return totals, normalized_movements
+
+
+def _build_shift_summary_from_snapshot(report: list[dict], movement_date: str, shift: str, closed_at: Optional[str] = None):
+    target_date = str(movement_date or "").strip()
+    target_shift = str(shift or "general").strip().lower() or "general"
+    target_closed_at = str(closed_at or "").strip()
+
+    for day_report in list(report or []):
+        if str(day_report.get("date") or "").strip() != target_date:
+            continue
+        for shift_row in list(day_report.get("shifts") or []):
+            shift_label = str(shift_row.get("shift_label") or shift_row.get("shift_id") or "general").strip().lower() or "general"
+            shift_end_time = str(shift_row.get("end_time") or "").strip()
+            if shift_label != target_shift:
+                continue
+            if target_closed_at and shift_end_time and shift_end_time != target_closed_at:
+                continue
+
+            movement_totals, normalized_movements = _summarize_snapshot_shift_movements(shift_row.get("movimientos") or [])
+            opening_balance = float(shift_row.get("saldo_inicial") or 0)
+            cash_total = float(shift_row.get("efectivo") or 0)
+            cash_balance = opening_balance + cash_total - (
+                movement_totals["withdrawals_total"]
+                + movement_totals["vouchers_total"]
+                + movement_totals["losses_total"]
+            )
+
+            return {
+                "date": target_date,
+                "shift": str(shift_row.get("shift_label") or shift or "general").strip() or "general",
+                "opening_balance": opening_balance,
+                "sales_total": float(shift_row.get("ingresos") or 0),
+                "cash_balance": cash_balance,
+                "cash_total": cash_total,
+                "transfer_total": float(shift_row.get("transferencia") or 0),
+                "online_total": float(shift_row.get("online") or 0),
+                "debit_total": float(shift_row.get("debito") or 0),
+                "withdrawals_total": movement_totals["withdrawals_total"],
+                "vouchers_total": movement_totals["vouchers_total"],
+                "losses_total": movement_totals["losses_total"],
+                "start_at": shift_row.get("start_time"),
+                "end_at": shift_row.get("end_time"),
+                "movements": normalized_movements,
+                "products": [],
+                "sales": [],
+                "snapshot": True,
+            }
+    return None
+
+
 def _format_order_item_detail(item: dict) -> str:
     quantity = item.get("quantity", 1) or 1
     name = str(item.get("product_name") or item.get("name") or "Producto").strip()
@@ -1185,14 +1261,30 @@ def get_cash_shift_summary(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    client = get_integration_client_for_installation(db, current_user, installation_id)
-    query = f"/api/integration/caja/shift-summary?date={movement_date}&shift={shift}"
-    if closed_at:
-        query += f"&closed_at={closed_at}"
-    payload = client.request("GET", query)
-    if isinstance(payload, dict) and "data" in payload:
-        return payload["data"]
-    return payload
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        raise HTTPException(status_code=404, detail="Instalación no encontrada")
+
+    if installation_is_online(install):
+        client = get_integration_client_for_installation(db, current_user, installation_id)
+        query = f"/api/integration/caja/shift-summary?date={movement_date}&shift={shift}"
+        if closed_at:
+            query += f"&closed_at={closed_at}"
+        payload = client.request("GET", query)
+        if isinstance(payload, dict) and "data" in payload:
+            return payload["data"]
+        return payload
+
+    snapshot = load_installation_snapshot(db, install.id, CASHBOX_SNAPSHOT_KEY) or {}
+    summary = _build_shift_summary_from_snapshot(
+        snapshot.get("report", []),
+        movement_date=movement_date,
+        shift=shift,
+        closed_at=closed_at,
+    )
+    if summary:
+        return summary
+    raise HTTPException(status_code=503, detail="No hay un cierre guardado para reimprimir en modo offline")
 
 
 @router.post("/caja/shift-delete")
