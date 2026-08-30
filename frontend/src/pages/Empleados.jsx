@@ -2,6 +2,30 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
+const formatNovedadDate = (value) => {
+  if (!value) {
+    return '-';
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-');
+    return `${day}/${month}/${year} • sin hora`;
+  }
+
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString('es-AR', {
+    day: 'numeric',
+    month: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export default function Empleados() {
   const { token, currentLocation } = useAuth();
   const [employees, setEmployees] = useState([]);
@@ -437,7 +461,7 @@ export default function Empleados() {
                     </div>
                     <div className="text-xs text-gray-400 mb-1">Monto Descontado: <span className="font-bold text-red-400">-${nov.amount.toLocaleString()}</span></div>
                     <div className="text-xs text-gray-400 mb-1">Motivo: <span className="italic text-gray-300">{nov.notes}</span></div>
-                    <div className="text-xs text-gray-500 mt-2">Fecha: {nov.event_date ? new Date(nov.event_date).toLocaleString('es-AR', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'}) : '-'}</div>
+                    <div className="text-xs text-gray-500 mt-2">Fecha: {formatNovedadDate(nov.event_date)}</div>
                 </div>
             </div>
           ))}

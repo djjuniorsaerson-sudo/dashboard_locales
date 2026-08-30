@@ -334,91 +334,93 @@ class ModulesExtractor:
     @staticmethod
     def get_empleado_novedades(db: Session):
         try:
-            preferred_query = text("""
-                SELECT *
-                FROM (
-                    SELECT
-                        CAST(n.id AS TEXT) AS id,
-                        n.employee_id AS employee_id,
-                        e.name as employee_name,
-                        n.event_type AS event_type,
-                        n.amount AS amount,
-                        n.notes AS notes,
-                        n.event_date AS event_date
-                    FROM empleado_novedades n
-                    JOIN empleados e ON n.employee_id = e.id
-                    WHERE LOWER(n.event_type) LIKE :adelanto OR LOWER(n.event_type) LIKE :descuento OR LOWER(n.event_type) LIKE :falta
-
-                    UNION ALL
-
-                    SELECT
-                        ('pago-' || CAST(p.id AS TEXT)) AS id,
-                        p.employee_id AS employee_id,
-                        e.name as employee_name,
-                        'adelanto' AS event_type,
-                        p.amount AS amount,
-                        COALESCE(NULLIF(p.notes, ''), 'Vale de caja') AS notes,
-                        COALESCE(cm.created_at, p.payment_date) AS event_date
-                    FROM pagos_empleados p
-                    JOIN empleados e ON p.employee_id = e.id
-                    LEFT JOIN caja_movimientos cm
-                        ON cm.source_type = 'empleado_pago'
-                       AND cm.source_id = p.id
-                       AND LOWER(cm.movement_type) = 'vale'
-                    WHERE LOWER(p.payment_type) LIKE :adelanto
-                ) AS novedades
-                ORDER BY event_date DESC, id DESC
-                LIMIT 100
-            """)
-            fallback_query = text("""
-                SELECT *
-                FROM (
-                    SELECT
-                        CAST(n.id AS TEXT) AS id,
-                        n.employee_id AS employee_id,
-                        e.name as employee_name,
-                        n.event_type AS event_type,
-                        n.amount AS amount,
-                        n.notes AS notes,
-                        n.event_date AS event_date
-                    FROM empleado_novedades n
-                    JOIN empleados e ON n.employee_id = e.id
-                    WHERE LOWER(n.event_type) LIKE :adelanto OR LOWER(n.event_type) LIKE :descuento OR LOWER(n.event_type) LIKE :falta
-
-                    UNION ALL
-
-                    SELECT
-                        ('pago-' || CAST(p.id AS TEXT)) AS id,
-                        p.employee_id AS employee_id,
-                        e.name as employee_name,
-                        'adelanto' AS event_type,
-                        p.amount AS amount,
-                        COALESCE(NULLIF(p.notes, ''), 'Vale de caja') AS notes,
-                        p.payment_date AS event_date
-                    FROM pagos_empleados p
-                    JOIN empleados e ON p.employee_id = e.id
-                    WHERE LOWER(p.payment_type) LIKE :adelanto
-                ) AS novedades
-                ORDER BY event_date DESC, id DESC
-                LIMIT 100
-            """)
             params = {"adelanto": "%adelanto%", "descuento": "%descuento%", "falta": "%falta%"}
+            employee_events_query = text("""
+                SELECT
+                    CAST(n.id AS TEXT) AS id,
+                    n.employee_id AS employee_id,
+                    e.name as employee_name,
+                    n.event_type AS event_type,
+                    n.amount AS amount,
+                    n.notes AS notes,
+                    n.event_date AS event_date
+                FROM empleado_novedades n
+                JOIN empleados e ON n.employee_id = e.id
+                WHERE LOWER(n.event_type) LIKE :adelanto OR LOWER(n.event_type) LIKE :descuento OR LOWER(n.event_type) LIKE :falta
+            """)
+            payment_events_query = text("""
+                SELECT
+                    p.id AS payment_id,
+                    p.employee_id AS employee_id,
+                    e.name as employee_name,
+                    p.amount AS amount,
+                    p.notes AS notes,
+                    p.payment_date AS payment_date
+                FROM pagos_empleados p
+                JOIN empleados e ON p.employee_id = e.id
+                WHERE LOWER(p.payment_type) LIKE :adelanto
+            """)
+            employee_rows = db.execute(employee_events_query, params).fetchall()
+            payment_rows = db.execute(payment_events_query, {"adelanto": "%adelanto%"}).fetchall()
+
+            payment_created_at_map = {}
             try:
-                result = db.execute(preferred_query, params).fetchall()
+                movement_rows = db.execute(text("""
+                    SELECT source_id, MAX(created_at) AS created_at
+                    FROM caja_movimientos
+                    WHERE source_type = 'empleado_pago'
+                      AND source_id IS NOT NULL
+                      AND LOWER(movement_type) = 'vale'
+                    GROUP BY source_id
+                """)).fetchall()
+                payment_created_at_map = {
+                    int(row[0]): row[1]
+                    for row in movement_rows
+                    if row[0] is not None and row[1] is not None
+                }
             except Exception:
-                result = db.execute(fallback_query, params).fetchall()
-            return [
+                payment_created_at_map = {}
+
+            def serialize_date(value):
+                if value is None:
+                    return None
+                if hasattr(value, "isoformat"):
+                    return value.isoformat()
+                return str(value)
+
+            novedades = [
                 {
-                    "id": r[0],
-                    "employee_id": r[1],
-                    "employee_name": r[2],
-                    "event_type": r[3],
-                    "amount": float(r[4] or 0),
-                    "notes": r[5] or "Sin motivo",
-                    "event_date": str(r[6]) if r[6] else None
-                } for r in result
+                    "id": row[0],
+                    "employee_id": row[1],
+                    "employee_name": row[2],
+                    "event_type": row[3],
+                    "amount": float(row[4] or 0),
+                    "notes": row[5] or "Sin motivo",
+                    "event_date": serialize_date(row[6]),
+                }
+                for row in employee_rows
             ]
-            return res
+
+            for row in payment_rows:
+                payment_id = int(row[0])
+                novedades.append({
+                    "id": f"pago-{payment_id}",
+                    "employee_id": row[1],
+                    "employee_name": row[2],
+                    "event_type": "adelanto",
+                    "amount": float(row[3] or 0),
+                    "notes": row[4] or "Vale de caja",
+                    "event_date": serialize_date(payment_created_at_map.get(payment_id) or row[5]),
+                })
+
+            novedades.sort(
+                key=lambda item: (
+                    item.get("event_date") or "",
+                    item.get("id") or "",
+                ),
+                reverse=True,
+            )
+            return novedades[:100]
         except Exception as e:
             print("Error in get_empleado_novedades:", str(e))
             return [{"id": 999, "employee_name": f"ERROR: {str(e)}", "event_type": "error", "amount": 0, "notes": str(e), "event_date": "2026-01-01"}]
