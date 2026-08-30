@@ -4,9 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Edit, XCircle, Search, CreditCard, User, Download } from 'lucide-react';
 import LocationSyncBanner from '../components/LocationSyncBanner';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
+import { useModal } from '../context/ModalContext';
 
 export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
   const { token, currentLocation } = useAuth();
+  const { showAlert, showConfirm } = useModal();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -48,7 +50,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
 
   const handleEdit = (order) => {
     if (isOffline) {
-      alert('El local está OFFLINE. Podés ver el último estado sincronizado, pero no editar pedidos hasta que vuelva a estar ONLINE.');
+      showAlert({ title: 'Local offline', message: 'El local está OFFLINE. Podés ver el último estado sincronizado, pero no editar pedidos hasta que vuelva a estar ONLINE.', tone: 'warning' });
       return;
     }
     setOrderToEdit(order);
@@ -57,10 +59,16 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
 
   const handleCancel = async (orderId) => {
     if (isOffline) {
-      alert('El local está OFFLINE. Podés ver el último estado sincronizado, pero no anular pedidos hasta que vuelva a estar ONLINE.');
+      showAlert({ title: 'Local offline', message: 'El local está OFFLINE. Podés ver el último estado sincronizado, pero no anular pedidos hasta que vuelva a estar ONLINE.', tone: 'warning' });
       return;
     }
-    if (!window.confirm(`¿Estás seguro de que quieres anular el pedido #${orderId}?`)) return;
+    const confirmed = await showConfirm({
+      title: `Anular pedido #${orderId}`,
+      message: `¿Estás seguro de que quieres anular el pedido #${orderId}?`,
+      tone: 'danger',
+      confirmLabel: 'Anular',
+    });
+    if (!confirmed) return;
     
     // Optimistic UI update
     setOrders(orders.filter(o => o.id !== orderId));
@@ -72,14 +80,14 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
       });
       if (!res.ok) {
         const errText = await res.text();
-        alert(`Error al cancelar: ${res.status} - ${errText}`);
+        showAlert({ title: 'No se pudo anular', message: `Error al cancelar: ${res.status} - ${errText}`, tone: 'danger' });
         fetchOrders();
       } else {
         dispatchPanelSync({ modules: ['orders', 'kitchen', 'dashboard', 'cash'] });
       }
     } catch (e) {
       console.error("Error canceling order", e);
-      alert(`Error de red al cancelar: ${e.message}`);
+      showAlert({ title: 'Error de red', message: `Error de red al cancelar: ${e.message}`, tone: 'danger' });
       // Reload orders to revert optimistic update if failed
       fetchOrders();
     }
@@ -87,7 +95,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
 
   const exportOrders = async () => {
     if (!currentLocation?.id) {
-      alert('No hay un local activo seleccionado.');
+      showAlert({ title: 'Falta local activo', message: 'No hay un local activo seleccionado.', tone: 'warning' });
       return;
     }
     setExporting(true);
@@ -113,7 +121,7 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting pedidos', error);
-      alert(error.message || 'No se pudo descargar el Excel');
+      showAlert({ title: 'No se pudo descargar', message: error.message || 'No se pudo descargar el Excel', tone: 'danger' });
     } finally {
       setExporting(false);
     }

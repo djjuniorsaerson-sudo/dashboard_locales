@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
 export default function Clientes() {
   const { token, currentLocation } = useAuth();
+  const { showAlert, showConfirm } = useModal();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -93,18 +95,24 @@ export default function Clientes() {
         closeModal();
         dispatchPanelSync({ modules: ['clients', 'orders'] });
       } else {
-        alert("Error al guardar el cliente.");
+        showAlert({ title: 'No se pudo guardar', message: 'Error al guardar el cliente.', tone: 'danger' });
       }
     } catch (e) {
       console.error("Error", e);
-      alert("Error de red al guardar.");
+      showAlert({ title: 'Error de red', message: 'Error de red al guardar.', tone: 'danger' });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (clientId) => {
-    if (!window.confirm("¿Estás seguro de que quieres eliminar este cliente? Los pedidos asociados no se borrarán, pero perderán la referencia a este cliente.")) {
+    const confirmed = await showConfirm({
+      title: 'Eliminar cliente',
+      message: '¿Estás seguro de que quieres eliminar este cliente? Los pedidos asociados no se borrarán, pero perderán la referencia a este cliente.',
+      tone: 'danger',
+      confirmLabel: 'Eliminar',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -119,16 +127,22 @@ export default function Clientes() {
         setClients(clients.filter(c => c.id !== clientId));
         dispatchPanelSync({ modules: ['clients', 'orders'] });
       } else {
-        alert("Error al eliminar el cliente.");
+        showAlert({ title: 'No se pudo eliminar', message: 'Error al eliminar el cliente.', tone: 'danger' });
       }
     } catch (e) {
       console.error("Error", e);
-      alert("Error de red al eliminar.");
+      showAlert({ title: 'Error de red', message: 'Error de red al eliminar.', tone: 'danger' });
     }
   };
 
   const handleResetMonthly = async (clientId) => {
-    if (!window.confirm("¿Reiniciar el contador mensual de compras de este cliente y sus domicilios?")) {
+    const confirmed = await showConfirm({
+      title: 'Reiniciar contador mensual',
+      message: '¿Reiniciar el contador mensual de compras de este cliente y sus domicilios?',
+      tone: 'warning',
+      confirmLabel: 'Reiniciar',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -143,11 +157,11 @@ export default function Clientes() {
         await fetchClients();
         dispatchPanelSync({ modules: ['clients'] });
       } else {
-        alert("Error al reiniciar el contador mensual.");
+        showAlert({ title: 'No se pudo reiniciar', message: 'Error al reiniciar el contador mensual.', tone: 'danger' });
       }
     } catch (e) {
       console.error("Error", e);
-      alert("Error de red al reiniciar.");
+      showAlert({ title: 'Error de red', message: 'Error de red al reiniciar.', tone: 'danger' });
     }
   };
 

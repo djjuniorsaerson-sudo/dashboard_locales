@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 
 export default function YummyInstallations() {
   const { token, fetchLocations } = useAuth();
+  const { showAlert, showConfirm } = useModal();
   const [installations, setInstallations] = useState([]);
   const [connectionRequests, setConnectionRequests] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -65,10 +67,10 @@ export default function YummyInstallations() {
         fetchLocations(token);
       } else {
         const err = await res.json();
-        alert("Error al aceptar: " + (err.detail || "Error desconocido"));
+        showAlert({ title: 'No se pudo aceptar', message: "Error al aceptar: " + (err.detail || "Error desconocido"), tone: 'danger' });
       }
     } catch (e) {
-      alert("Error de red");
+      showAlert({ title: 'Error de red', message: 'Error de red', tone: 'danger' });
     }
   };
 
@@ -82,7 +84,7 @@ export default function YummyInstallations() {
         fetchConnectionRequests();
       }
     } catch (e) {
-      alert("Error de red");
+      showAlert({ title: 'Error de red', message: 'Error de red', tone: 'danger' });
     }
   };
 
@@ -149,14 +151,14 @@ export default function YummyInstallations() {
         headers: { 'Authorization': "Bearer " + token }
       });
       if (res.ok) {
-        alert("Conexión Exitosa con el Programa");
+        showAlert({ title: 'Conexión correcta', message: 'Conexión exitosa con el programa', tone: 'success' });
       } else {
-        alert("Fallo la conexión con el Programa");
+        showAlert({ title: 'Conexión fallida', message: 'Falló la conexión con el programa', tone: 'danger' });
       }
       fetchInstallations();
       fetchLocations(token);
     } catch (e) {
-      alert("Error de red intentando conectar");
+      showAlert({ title: 'Error de red', message: 'Error de red intentando conectar', tone: 'danger' });
       fetchInstallations();
     }
   };
@@ -168,14 +170,20 @@ export default function YummyInstallations() {
         headers: { 'Authorization': "Bearer " + token }
       });
       const data = await res.json();
-      alert("Diagnóstico:\n" + JSON.stringify(data, null, 2));
+      showAlert({ title: 'Diagnóstico', message: 'Resultado del diagnóstico', details: data, tone: 'info' });
     } catch (e) {
-      alert("Error ejecutando diagnóstico");
+      showAlert({ title: 'Error', message: 'Error ejecutando diagnóstico', tone: 'danger' });
     }
   };
 
   const handleDeleteInstallation = async (id) => {
-    if(!confirm("¿Estás seguro de eliminar esta instalación?")) return;
+    const confirmed = await showConfirm({
+      title: 'Eliminar instalación',
+      message: '¿Estás seguro de eliminar esta instalación?',
+      tone: 'danger',
+      confirmLabel: 'Eliminar',
+    });
+    if(!confirmed) return;
     try {
       const res = await fetch("/api/v1/yummy-installations/" + id, {
         method: 'DELETE',
@@ -185,10 +193,10 @@ export default function YummyInstallations() {
         setInstallations(prev => prev.filter(i => i.id !== id));
         fetchLocations(token);
       } else {
-        alert("Error al eliminar");
+        showAlert({ title: 'No se pudo eliminar', message: 'Error al eliminar', tone: 'danger' });
       }
     } catch (e) {
-      alert("Error de red");
+      showAlert({ title: 'Error de red', message: 'Error de red', tone: 'danger' });
     }
   };
 

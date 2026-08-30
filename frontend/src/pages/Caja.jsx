@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import LocationSyncBanner from '../components/LocationSyncBanner';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
+import { useModal } from '../context/ModalContext';
 
 export default function Caja() {
   const REPORTS_PER_PAGE = 5;
   const { token, currentLocation, fetchLocations } = useAuth();
+  const { showAlert, showConfirm } = useModal();
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedDays, setExpandedDays] = useState({});
@@ -119,7 +121,7 @@ export default function Caja() {
     const html = buildCashClosureHtml(summaryPayload);
     const printWindow = window.open('', '_blank', 'width=1024,height=900');
     if (!printWindow) {
-      alert('El navegador bloqueó la ventana de impresión.');
+      showAlert({ title: 'Impresión bloqueada', message: 'El navegador bloqueó la ventana de impresión.', tone: 'warning' });
       return;
     }
     printWindow.document.open();
@@ -146,7 +148,7 @@ export default function Caja() {
       });
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
-        alert(error.detail || 'No se pudo reimprimir ese cierre.');
+        showAlert({ title: 'No se pudo reimprimir', message: error.detail || 'No se pudo reimprimir ese cierre.', tone: 'danger' });
         return;
       }
       const summaryData = await res.json();
@@ -154,13 +156,18 @@ export default function Caja() {
       openPrintWindow(payload);
     } catch (error) {
       console.error('Error reprinting shift', error);
-      alert('Error al reimprimir el cierre.');
+      showAlert({ title: 'Error de impresión', message: 'Error al reimprimir el cierre.', tone: 'danger' });
     }
   };
 
   const deleteShift = async (dayReport, shift) => {
     const shiftName = formatShiftLabel(shift);
-    const confirmed = window.confirm(`¿Eliminar ${shiftName} del ${formatDateLabel(dayReport.date)}? Esta acción borra la apertura/cierre y movimientos de caja de ese turno.`);
+    const confirmed = await showConfirm({
+      title: 'Borrar turno',
+      message: `¿Eliminar ${shiftName} del ${formatDateLabel(dayReport.date)}? Esta acción borra la apertura/cierre y movimientos de caja de ese turno.`,
+      tone: 'danger',
+      confirmLabel: 'Borrar turno',
+    });
     if (!confirmed) return;
 
     try {
@@ -182,14 +189,14 @@ export default function Caja() {
 
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
-        alert(error.detail || 'No se pudo eliminar el turno.');
+        showAlert({ title: 'No se pudo eliminar', message: error.detail || 'No se pudo eliminar el turno.', tone: 'danger' });
         return;
       }
 
       await fetchCaja();
     } catch (error) {
       console.error('Error deleting shift', error);
-      alert('Error al eliminar el turno.');
+      showAlert({ title: 'Error al eliminar', message: 'Error al eliminar el turno.', tone: 'danger' });
     }
   };
 
@@ -251,7 +258,7 @@ export default function Caja() {
 
   const handleOpenModal = (type) => {
     if (isOffline && type === 'reset_turno') {
-      alert('El local está OFFLINE. El cierre de turno requiere conexión en tiempo real.');
+      showAlert({ title: 'Local offline', message: 'El local está OFFLINE. El cierre de turno requiere conexión en tiempo real.', tone: 'warning' });
       return;
     }
     setModalType(type);
@@ -344,11 +351,11 @@ export default function Caja() {
 
           openPrintWindow(printData || data);
         } else if (data?.queued) {
-          alert(data.message || 'Movimiento en cola. Se enviará cuando el local vuelva a estar online.');
+          showAlert({ title: 'Movimiento en cola', message: data.message || 'Movimiento en cola. Se enviará cuando el local vuelva a estar online.', tone: 'warning' });
         }
       } else {
         const error = await res.json().catch(() => ({}));
-        alert(error.detail || 'Error al registrar movimiento');
+        showAlert({ title: 'No se pudo registrar', message: error.detail || 'Error al registrar movimiento', tone: 'danger' });
       }
     } catch (error) {
       console.error("Error saving movimiento", error);

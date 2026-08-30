@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
+import { useModal } from '../context/ModalContext';
 
 const formatNovedadDate = (value) => {
   if (!value) {
@@ -59,6 +60,7 @@ const formatNovedadDate = (value) => {
 
 export default function Empleados() {
   const { token, currentLocation } = useAuth();
+  const { showAlert, showConfirm } = useModal();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [novedades, setNovedades] = useState([]);
@@ -163,7 +165,7 @@ export default function Empleados() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedEmployee?.id || !currentLocation?.id) {
-      alert('No hay un empleado o local activo seleccionado.');
+      showAlert({ title: 'Faltan datos', message: 'No hay un empleado o local activo seleccionado.', tone: 'warning' });
       return;
     }
     setIsSaving(true);
@@ -188,11 +190,11 @@ export default function Empleados() {
         closeModal();
         dispatchPanelSync({ modules: ['employees', 'cash'] });
       } else {
-        alert("Hubo un error al registrar la novedad");
+        showAlert({ title: 'No se pudo registrar', message: 'Hubo un error al registrar la novedad', tone: 'danger' });
       }
     } catch (error) {
       console.error("Error saving:", error);
-      alert("Error de conexión");
+      showAlert({ title: 'Error de conexión', message: 'Error de conexión', tone: 'danger' });
     } finally {
       setIsSaving(false);
     }
@@ -201,7 +203,7 @@ export default function Empleados() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editingEmployee || !currentLocation?.id) {
-      alert('No hay un local activo seleccionado.');
+      showAlert({ title: 'Falta local activo', message: 'No hay un local activo seleccionado.', tone: 'warning' });
       return;
     }
     setIsSaving(true);
@@ -228,7 +230,7 @@ export default function Empleados() {
       dispatchPanelSync({ modules: ['employees'] });
     } catch (error) {
       console.error("Error updating employee", error);
-      alert(error.message || "No se pudo actualizar el empleado");
+      showAlert({ title: 'No se pudo actualizar', message: error.message || "No se pudo actualizar el empleado", tone: 'danger' });
     } finally {
       setIsSaving(false);
     }
@@ -236,10 +238,15 @@ export default function Empleados() {
 
   const handleResetEmployee = async (employee) => {
     if (!currentLocation?.id) {
-      alert('No hay un local activo seleccionado.');
+      showAlert({ title: 'Falta local activo', message: 'No hay un local activo seleccionado.', tone: 'warning' });
       return;
     }
-    const confirmed = window.confirm(`Se van a borrar faltas, adelantos y pagos de ${employee.name}. ¿Querés continuar?`);
+    const confirmed = await showConfirm({
+      title: `Reiniciar ${employee.name}`,
+      message: `Se van a borrar faltas, adelantos y pagos de ${employee.name}. ¿Querés continuar?`,
+      tone: 'danger',
+      confirmLabel: 'Reiniciar',
+    });
     if (!confirmed) {
       return;
     }
@@ -260,7 +267,7 @@ export default function Empleados() {
       dispatchPanelSync({ modules: ['employees'] });
     } catch (error) {
       console.error("Error resetting employee", error);
-      alert(error.message || "No se pudo reiniciar el empleado");
+      showAlert({ title: 'No se pudo reiniciar', message: error.message || "No se pudo reiniciar el empleado", tone: 'danger' });
     } finally {
       setIsSaving(false);
     }
@@ -268,10 +275,15 @@ export default function Empleados() {
 
   const handleDeleteNovedad = async (nov) => {
     if (!currentLocation?.id) {
-      alert('No hay un local activo seleccionado.');
+      showAlert({ title: 'Falta local activo', message: 'No hay un local activo seleccionado.', tone: 'warning' });
       return;
     }
-    const confirmed = window.confirm(`¿Borrar ${nov.event_type?.toLowerCase() || 'la novedad'} de ${nov.employee_name}?`);
+    const confirmed = await showConfirm({
+      title: 'Borrar novedad',
+      message: `¿Borrar ${nov.event_type?.toLowerCase() || 'la novedad'} de ${nov.employee_name}?`,
+      tone: 'danger',
+      confirmLabel: 'Borrar',
+    });
     if (!confirmed) {
       return;
     }
@@ -292,7 +304,7 @@ export default function Empleados() {
       dispatchPanelSync({ modules: ['employees', 'cash'] });
     } catch (error) {
       console.error("Error deleting novedad", error);
-      alert(error.message || "No se pudo eliminar la novedad");
+      showAlert({ title: 'No se pudo eliminar', message: error.message || "No se pudo eliminar la novedad", tone: 'danger' });
     } finally {
       setIsSaving(false);
     }

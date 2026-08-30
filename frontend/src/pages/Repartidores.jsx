@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { subscribePanelSync } from '../components/syncEvents';
+import { useModal } from '../context/ModalContext';
 
 export default function Repartidores() {
   const { token, currentLocation } = useAuth();
+  const { showAlert } = useModal();
   const [repartidores, setRepartidores] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -129,7 +131,7 @@ export default function Repartidores() {
 
   const exportMovimientos = async () => {
     if (!currentLocation?.id) {
-      alert('No hay un local activo seleccionado.');
+      showAlert({ title: 'Falta local activo', message: 'No hay un local activo seleccionado.', tone: 'warning' });
       return;
     }
     setExporting(true);
@@ -155,7 +157,7 @@ export default function Repartidores() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting repartidores', error);
-      alert(error.message || 'No se pudo descargar el Excel');
+      showAlert({ title: 'No se pudo descargar', message: error.message || 'No se pudo descargar el Excel', tone: 'danger' });
     } finally {
       setExporting(false);
     }

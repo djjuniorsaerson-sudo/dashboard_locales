@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 
 import { useAuth } from '../context/AuthContext';
+import { useModal } from '../context/ModalContext';
 import LocationSyncBanner from '../components/LocationSyncBanner';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
 export default function Usuarios() {
   const { token, currentLocation } = useAuth();
+  const { showAlert, showConfirm } = useModal();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,11 +80,11 @@ export default function Usuarios() {
         fetchUsuarios();
         dispatchPanelSync({ modules: ['users'] });
       } else {
-        alert(await getErrorMessage(res, 'Error creando usuario'));
+        showAlert({ title: 'No se pudo crear', message: await getErrorMessage(res, 'Error creando usuario'), tone: 'danger' });
       }
     } catch (e) {
       console.error(e);
-      alert("Error de conexión");
+      showAlert({ title: 'Error de conexión', message: 'Error de conexión', tone: 'danger' });
     }
   };
 
@@ -115,11 +117,11 @@ export default function Usuarios() {
         fetchUsuarios();
         dispatchPanelSync({ modules: ['users'] });
       } else {
-        alert(await getErrorMessage(res, 'Error actualizando usuario'));
+        showAlert({ title: 'No se pudo actualizar', message: await getErrorMessage(res, 'Error actualizando usuario'), tone: 'danger' });
       }
     } catch (e) {
       console.error(e);
-      alert('Error de conexión');
+      showAlert({ title: 'Error de conexión', message: 'Error de conexión', tone: 'danger' });
     }
   };
 
@@ -141,19 +143,25 @@ export default function Usuarios() {
         setPasswordForm({ password: '' });
         setSelectedUser(null);
         dispatchPanelSync({ modules: ['users'] });
-        alert("Contraseña actualizada correctamente");
+        showAlert({ title: 'Contraseña actualizada', message: 'Contraseña actualizada correctamente', tone: 'success' });
       } else {
-        alert(await getErrorMessage(res, 'Error actualizando contraseña'));
+        showAlert({ title: 'No se pudo actualizar', message: await getErrorMessage(res, 'Error actualizando contraseña'), tone: 'danger' });
       }
     } catch (e) {
       console.error(e);
-      alert("Error de conexión");
+      showAlert({ title: 'Error de conexión', message: 'Error de conexión', tone: 'danger' });
     }
   };
 
   const handleToggleStatus = async (user) => {
     const newStatus = !user.active;
-    if (!window.confirm(`¿Seguro que deseas ${newStatus ? 'activar' : 'desactivar'} al usuario ${user.username}?`)) return;
+    const confirmed = await showConfirm({
+      title: `${newStatus ? 'Activar' : 'Desactivar'} usuario`,
+      message: `¿Seguro que deseas ${newStatus ? 'activar' : 'desactivar'} al usuario ${user.username}?`,
+      tone: 'warning',
+      confirmLabel: newStatus ? 'Activar' : 'Desactivar',
+    });
+    if (!confirmed) return;
     
     try {
       const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
@@ -169,16 +177,22 @@ export default function Usuarios() {
         fetchUsuarios();
         dispatchPanelSync({ modules: ['users'] });
       } else {
-        alert(await getErrorMessage(res, 'Error cambiando estado'));
+        showAlert({ title: 'No se pudo cambiar', message: await getErrorMessage(res, 'Error cambiando estado'), tone: 'danger' });
       }
     } catch (e) {
       console.error(e);
-      alert("Error cambiando estado");
+      showAlert({ title: 'Error de conexión', message: 'Error cambiando estado', tone: 'danger' });
     }
   };
 
   const handleDeleteUser = async (user) => {
-    if (!window.confirm(`¿Seguro que deseas borrar al usuario ${user.username}?`)) return;
+    const confirmed = await showConfirm({
+      title: 'Borrar usuario',
+      message: `¿Seguro que deseas borrar al usuario ${user.username}?`,
+      tone: 'danger',
+      confirmLabel: 'Borrar',
+    });
+    if (!confirmed) return;
     try {
       const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
       const res = await fetch(`/api/v1/data/usuarios/${user.id}${installationQuery}`, {
@@ -191,11 +205,11 @@ export default function Usuarios() {
         fetchUsuarios();
         dispatchPanelSync({ modules: ['users'] });
       } else {
-        alert(await getErrorMessage(res, 'Error eliminando usuario'));
+        showAlert({ title: 'No se pudo borrar', message: await getErrorMessage(res, 'Error eliminando usuario'), tone: 'danger' });
       }
     } catch (e) {
       console.error(e);
-      alert('Error de conexión');
+      showAlert({ title: 'Error de conexión', message: 'Error de conexión', tone: 'danger' });
     }
   };
 

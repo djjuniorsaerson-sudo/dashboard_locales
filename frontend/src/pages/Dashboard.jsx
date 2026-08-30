@@ -3,9 +3,11 @@ import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import LocationSyncBanner from '../components/LocationSyncBanner';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
+import { useModal } from '../context/ModalContext';
 
 export default function Dashboard({ setIsSyncing }) {
   const { token, currentLocation, fetchLocations } = useAuth();
+  const { showAlert } = useModal();
   const [metrics, setMetrics] = useState({
     ventas_turno: 0,
     pedidos_activos: 0,
@@ -161,7 +163,7 @@ export default function Dashboard({ setIsSyncing }) {
     const currentStock = Number(selectedStockItem?.stock || 0);
     
     if (isNaN(qty) || qty === 0) {
-      alert("Por favor ingresa un número válido (puede ser negativo para restar).");
+      showAlert({ title: 'Cantidad inválida', message: 'Por favor ingresa un número válido (puede ser negativo para restar).', tone: 'warning' });
       return;
     }
 
@@ -186,18 +188,18 @@ export default function Dashboard({ setIsSyncing }) {
         if (result?.queued) {
           await fetchLocations(token);
           dispatchPanelSync({ modules: ['dashboard', 'stock'] });
-          alert(result.message || 'Ajuste de stock en cola. Se aplicará cuando el local vuelva a estar online.');
+          showAlert({ title: 'Movimiento en cola', message: result.message || 'Ajuste de stock en cola. Se aplicará cuando el local vuelva a estar online.', tone: 'warning' });
           return;
         }
         await fetchMetrics();
         await fetchLocations(token);
         dispatchPanelSync({ modules: ['dashboard', 'stock'] });
       } else {
-        alert(result.detail || "Error al actualizar el stock.");
+        showAlert({ title: 'No se pudo actualizar', message: result.detail || "Error al actualizar el stock.", tone: 'danger' });
       }
     } catch (e) {
       console.error(e);
-      alert("Error de red.");
+      showAlert({ title: 'Error de red', message: 'Error de red.', tone: 'danger' });
     } finally {
       setIsSavingStock(false);
     }
