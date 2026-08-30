@@ -334,7 +334,7 @@ class ModulesExtractor:
     @staticmethod
     def get_empleado_novedades(db: Session):
         try:
-            query = text("""
+            preferred_query = text("""
                 SELECT *
                 FROM (
                     SELECT
@@ -370,7 +370,43 @@ class ModulesExtractor:
                 ORDER BY event_date DESC, id DESC
                 LIMIT 100
             """)
-            result = db.execute(query, {"adelanto": "%adelanto%", "descuento": "%descuento%", "falta": "%falta%"}).fetchall()
+            fallback_query = text("""
+                SELECT *
+                FROM (
+                    SELECT
+                        CAST(n.id AS TEXT) AS id,
+                        n.employee_id AS employee_id,
+                        e.name as employee_name,
+                        n.event_type AS event_type,
+                        n.amount AS amount,
+                        n.notes AS notes,
+                        n.event_date AS event_date
+                    FROM empleado_novedades n
+                    JOIN empleados e ON n.employee_id = e.id
+                    WHERE LOWER(n.event_type) LIKE :adelanto OR LOWER(n.event_type) LIKE :descuento OR LOWER(n.event_type) LIKE :falta
+
+                    UNION ALL
+
+                    SELECT
+                        ('pago-' || CAST(p.id AS TEXT)) AS id,
+                        p.employee_id AS employee_id,
+                        e.name as employee_name,
+                        'adelanto' AS event_type,
+                        p.amount AS amount,
+                        COALESCE(NULLIF(p.notes, ''), 'Vale de caja') AS notes,
+                        p.payment_date AS event_date
+                    FROM pagos_empleados p
+                    JOIN empleados e ON p.employee_id = e.id
+                    WHERE LOWER(p.payment_type) LIKE :adelanto
+                ) AS novedades
+                ORDER BY event_date DESC, id DESC
+                LIMIT 100
+            """)
+            params = {"adelanto": "%adelanto%", "descuento": "%descuento%", "falta": "%falta%"}
+            try:
+                result = db.execute(preferred_query, params).fetchall()
+            except Exception:
+                result = db.execute(fallback_query, params).fetchall()
             return [
                 {
                     "id": r[0],
