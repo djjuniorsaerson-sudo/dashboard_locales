@@ -358,9 +358,13 @@ class ModulesExtractor:
                         'adelanto' AS event_type,
                         p.amount AS amount,
                         COALESCE(NULLIF(p.notes, ''), 'Vale de caja') AS notes,
-                        p.payment_date AS event_date
+                        COALESCE(cm.created_at, p.payment_date) AS event_date
                     FROM pagos_empleados p
                     JOIN empleados e ON p.employee_id = e.id
+                    LEFT JOIN caja_movimientos cm
+                        ON cm.source_type = 'empleado_pago'
+                       AND cm.source_id = p.id
+                       AND LOWER(cm.movement_type) = 'vale'
                     WHERE LOWER(p.payment_type) LIKE :adelanto
                 ) AS novedades
                 ORDER BY event_date DESC, id DESC
