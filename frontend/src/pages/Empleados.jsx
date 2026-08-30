@@ -12,6 +12,14 @@ const formatNovedadDate = (value) => {
     return `${day}/${month}/${year} • sin hora`;
   }
 
+  const explicitLocalDateTime = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/
+  );
+  if (explicitLocalDateTime) {
+    const [, year, month, day, hour, minute] = explicitLocalDateTime;
+    return `${day}/${month}/${year}, ${hour}:${minute}`;
+  }
+
   const normalized = value.includes('T') ? value : value.replace(' ', 'T');
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) {
