@@ -691,13 +691,20 @@ def add_empleado_novedad(
 
 @router.delete("/employees/novedades/{event_id}")
 def delete_empleado_novedad(
-    event_id: int,
+    event_id: str,
     installation_id: Optional[str] = Query(default=None),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
     client = get_integration_client_for_installation(db, current_user, installation_id)
-    payload = client.request("DELETE", f"/api/integration/employee-events/{event_id}")
+    normalized_event_id = str(event_id or "").strip()
+    if normalized_event_id.startswith("pago-"):
+        payment_id = normalized_event_id.split("pago-", 1)[1].strip()
+        if not payment_id.isdigit():
+            raise HTTPException(status_code=400, detail="ID de pago inválido")
+        payload = client.request("DELETE", f"/api/empleado-pagos/{payment_id}")
+    else:
+        payload = client.request("DELETE", f"/api/integration/employee-events/{normalized_event_id}")
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
