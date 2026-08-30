@@ -524,12 +524,11 @@ export default function Caja() {
         ) : reportes.length === 0 ? (
            <div className="p-8 text-center text-gray-500 bg-gray-800 rounded-xl">No hay datos de caja registrados recientes.</div>
         ) : (
-          paginatedReportes.map((dayReport) => (
+          paginatedReportes.map((dayReport) => {
+            const summary = getDaySummary(dayReport);
+            return (
             <div key={dayReport.date} className="bg-white/[0.03] rounded-3xl border border-white/10 overflow-hidden shadow-2xl backdrop-blur-xl">
               {/* Encabezado del Día */}
-              {(() => {
-                const summary = getDaySummary(dayReport);
-                return (
               <div 
                 className="bg-black/10 p-4 sm:p-5 md:px-6 md:py-6 cursor-pointer hover:bg-white/[0.03] transition-colors"
                 onClick={() => toggleDay(dayReport.date)}
@@ -612,8 +611,6 @@ export default function Caja() {
                   </div>
                 </div>
               </div>
-                );
-              })()}
 
               {/* Contenido Desplegable */}
               {expandedDays[dayReport.date] && (
@@ -761,7 +758,7 @@ export default function Caja() {
                 </div>
               )}
             </div>
-          ))
+          )})
         )}
       </div>
 
