@@ -47,9 +47,12 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
 
   useEffect(() => {
     if (orderToEdit) {
-      setPhone(orderToEdit.phone || '');
-      setName(orderToEdit.client_name || '');
-      setAddress(orderToEdit.address || '');
+      const editPhone = orderToEdit.customer_phone || orderToEdit.phone || '';
+      const editName = orderToEdit.customer_name || orderToEdit.client_name || '';
+      const editAddress = orderToEdit.customer_address || orderToEdit.address || '';
+      setPhone(editPhone);
+      setName(editName);
+      setAddress(editAddress);
       setOrderType(orderToEdit.order_type || 'Delivery');
       setPaymentMethod(orderToEdit.payment_method || 'efectivo');
       setPaymentBreakdown({
@@ -58,7 +61,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         debito: String(orderToEdit.payment_breakdown?.debito ?? ''),
         online: String(orderToEdit.payment_breakdown?.online ?? ''),
       });
-      setAvailableAddresses(orderToEdit.address ? [{ client_id: orderToEdit.customer_id, address: orderToEdit.address }] : []);
+      setAvailableAddresses(editAddress ? [{ client_id: orderToEdit.customer_id, address: editAddress }] : []);
       if (orderToEdit.items) {
         setCart(orderToEdit.items.map((item, idx) => ({
           ...item,
@@ -78,37 +81,63 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     }
   }, [orderToEdit]);
 
-  const handlePhoneBlur = async () => {
-    if (!phone) return;
+  const findClientByPhone = async (phoneValue) => {
+    const cleanPhone = String(phoneValue || '').trim();
+    if (!cleanPhone) return null;
     try {
-      const res = await fetch(`/api/v1/data/clients/by-phone/${phone}`, {
+      const params = new URLSearchParams();
+      if (currentLocation?.id) {
+        params.set('installation_id', currentLocation.id);
+      }
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`/api/v1/data/clients/by-phone/${encodeURIComponent(cleanPhone)}${query}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
-        const matches = Array.isArray(data.matches) ? data.matches : [];
-        const addresses = Array.isArray(data.addresses) ? data.addresses : [];
-        setClientMatches(matches);
-        setAvailableAddresses(addresses);
-
-        if (matches.length > 0) {
-          const preferredName = matches.find((item) => String(item.name || '').trim())?.name || '';
-          setName(preferredName);
-        }
-
-        if (addresses.length === 1) {
-          setAddress(addresses[0].address || '');
-        } else if (addresses.length > 1) {
-          const stillExists = addresses.some((item) => item.address === address);
-          if (!stillExists) {
-            setAddress(addresses[0].address || '');
-          }
-        } else if (matches.length > 0) {
-          setAddress(matches[0].address || '');
-        }
+        return await res.json();
       }
     } catch (e) {
       console.log("Cliente no encontrado, se creará uno nuevo");
+    }
+    return null;
+  };
+
+  const applyClientLookup = (data, preserveTypedFields = true) => {
+    if (!data) return { name: '', address: '' };
+    const matches = Array.isArray(data.matches) ? data.matches : [];
+    const addresses = Array.isArray(data.addresses) ? data.addresses : [];
+    setClientMatches(matches);
+    setAvailableAddresses(addresses);
+
+    const preferredName = matches.find((item) => String(item.name || '').trim())?.name || '';
+    const preferredAddress = addresses[0]?.address || matches[0]?.address || '';
+
+    if (!preserveTypedFields || !name.trim()) {
+      if (preferredName) {
+          setName(preferredName);
+      }
+    }
+
+    if (!preserveTypedFields || !address.trim()) {
+      if (preferredAddress) {
+        setAddress(preferredAddress);
+      }
+    } else if (addresses.length > 1) {
+      const stillExists = addresses.some((item) => item.address === address);
+      if (!stillExists && preferredAddress) {
+        setAddress(preferredAddress);
+      }
+    }
+
+    return { name: preferredName, address: preferredAddress };
+  };
+
+  const handlePhoneBlur = async () => {
+    if (!phone) return;
+    const data = await findClientByPhone(phone);
+    if (data) {
+      applyClientLookup(data, true);
+    } else {
       setClientMatches([]);
       setAvailableAddresses([]);
     }
@@ -411,10 +440,23 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     setSuccessMsg('');
     setDuplicateWarning('');
 
+    let resolvedName = name.trim();
+    let resolvedAddress = address.trim();
+    const resolvedPhone = phone.trim();
+    if (resolvedPhone && (!resolvedName || !resolvedAddress)) {
+      const lookup = applyClientLookup(await findClientByPhone(resolvedPhone), true);
+      resolvedName = resolvedName || lookup.name || '';
+      resolvedAddress = resolvedAddress || lookup.address || '';
+    }
+    const customerName = resolvedName || (resolvedPhone ? `Cliente ${resolvedPhone}` : (orderType === 'Mostrador' ? 'MOSTRADOR' : ''));
+
     const payload = {
-      customer_name: name || (orderType === 'Mostrador' ? 'MOSTRADOR' : ''),
-      customer_phone: phone,
-      customer_address: address,
+      customer_name: customerName,
+      client_name: customerName,
+      customer_phone: resolvedPhone,
+      phone: resolvedPhone,
+      customer_address: resolvedAddress,
+      address: resolvedAddress,
       order_type: orderType,
       payment_method: paymentMethod,
       allow_duplicate: overrideDuplicate,

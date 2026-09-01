@@ -904,8 +904,56 @@ def get_client_by_phone(phone: str, db: Session = Depends(deps.get_yummy_db)):
 
 
 @router.get("/clients/by-phone/{phone}")
-def get_clients_by_phone(phone: str, db: Session = Depends(deps.get_yummy_db)):
-    clients = ModulesExtractor.search_clients_by_phone(db, phone)
+def get_clients_by_phone(
+    phone: str,
+    installation_id: Optional[str] = Query(default=None),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if install and installation_is_online(install):
+        try:
+            client = YummyIntegrationClient(install.base_url, install.api_key)
+            payload = _extract_remote_payload(client.request("GET", f"/api/clientes/lookup?phone={phone}"))
+            if isinstance(payload, dict):
+                raw_addresses = payload.get("addresses") or []
+                addresses = []
+                for address_row in raw_addresses:
+                    address_value = str(
+                        address_row.get("address") if isinstance(address_row, dict) else address_row
+                    ).strip()
+                    if address_value:
+                        addresses.append({
+                            "client_id": payload.get("id"),
+                            "address": address_value,
+                            "name": payload.get("name") or "",
+                            "notes": payload.get("notes") or "",
+                        })
+                main_address = str(payload.get("address") or "").strip()
+                if main_address and not any(row["address"].lower() == main_address.lower() for row in addresses):
+                    addresses.insert(0, {
+                        "client_id": payload.get("id"),
+                        "address": main_address,
+                        "name": payload.get("name") or "",
+                        "notes": payload.get("notes") or "",
+                    })
+                return {
+                    "matches": [payload],
+                    "addresses": addresses,
+                }
+        except Exception:
+            pass
+
+    from app.db.session import SessionLocal
+
+    local_db = SessionLocal()
+    try:
+        clients = ModulesExtractor.search_clients_by_phone(local_db, phone)
+    except Exception:
+        clients = []
+    finally:
+        local_db.close()
+
     if not clients:
         return {
             "matches": [],
