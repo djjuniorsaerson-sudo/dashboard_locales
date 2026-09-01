@@ -3,16 +3,32 @@ import { useAuth } from '../context/AuthContext';
 import { useModal } from '../context/ModalContext';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 
+const readCachedData = (key) => {
+  if (!key) return null;
+  try {
+    return JSON.parse(sessionStorage.getItem(key) || 'null');
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedData = (key, value) => {
+  if (!key) return;
+  sessionStorage.setItem(key, JSON.stringify(value));
+};
+
 export default function Clientes() {
   const { token, currentLocation } = useAuth();
   const { showAlert, showConfirm } = useModal();
   const [clients, setClients] = useState([]);
+  const [totalClients, setTotalClients] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const cacheKey = currentLocation?.id ? `panel:clientes:${currentLocation.id}` : null;
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -21,24 +37,56 @@ export default function Clientes() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    fetchClients();
-    return subscribePanelSync((detail) => {
+    const cached = currentPage === 1 && !searchTerm.trim() ? readCachedData(cacheKey) : null;
+    if (Array.isArray(cached?.items)) {
+      setClients(cached.items);
+      setTotalClients(Number(cached.total || cached.items.length));
+      setLoading(false);
+    }
+
+    const timer = setTimeout(() => {
+      fetchClients(Boolean(cached?.items));
+    }, searchTerm.trim() ? 250 : 0);
+
+    const unsubscribe = subscribePanelSync((detail) => {
       if (detail?.modules && !detail.modules.some((module) => ['clients', 'orders'].includes(module))) {
         return;
       }
-      fetchClients();
+      fetchClients(true);
     });
-  }, [token, currentLocation?.id]);
 
-  const fetchClients = async () => {
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [token, currentLocation?.id, currentPage, searchTerm]);
+
+  const fetchClients = async (background = false) => {
     try {
-      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
-      const res = await fetch(`/api/v1/data/clients${installationQuery}`, {
+      if (!background) setLoading(true);
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        page_size: String(itemsPerPage),
+        paged: 'true',
+      });
+      if (currentLocation?.id) {
+        params.set('installation_id', currentLocation.id);
+      }
+      if (searchTerm.trim()) {
+        params.set('search', searchTerm.trim());
+      }
+      const res = await fetch(`/api/v1/data/clients?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setClients(data);
+        const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+        const total = Number(data?.total ?? items.length);
+        setClients(items);
+        setTotalClients(total);
+        if (currentPage === 1 && !searchTerm.trim()) {
+          writeCachedData(cacheKey, { items, total });
+        }
       }
     } catch (e) {
       console.error("Error", e);
@@ -91,7 +139,7 @@ export default function Clientes() {
       });
 
       if (res.ok) {
-        await fetchClients();
+        await fetchClients(true);
         closeModal();
         dispatchPanelSync({ modules: ['clients', 'orders'] });
       } else {
@@ -125,6 +173,7 @@ export default function Clientes() {
 
       if (res.ok) {
         setClients(clients.filter(c => c.id !== clientId));
+        setTotalClients((total) => Math.max(0, total - 1));
         dispatchPanelSync({ modules: ['clients', 'orders'] });
       } else {
         showAlert({ title: 'No se pudo eliminar', message: 'Error al eliminar el cliente.', tone: 'danger' });
@@ -154,7 +203,7 @@ export default function Clientes() {
       });
 
       if (res.ok) {
-        await fetchClients();
+        await fetchClients(true);
         dispatchPanelSync({ modules: ['clients'] });
       } else {
         showAlert({ title: 'No se pudo reiniciar', message: 'Error al reiniciar el contador mensual.', tone: 'danger' });
@@ -165,21 +214,10 @@ export default function Clientes() {
     }
   };
 
-  // Filter logic
-  const filteredClients = clients.filter(c => {
-    const term = searchTerm.toLowerCase();
-    return (
-      (c.name || '').toLowerCase().includes(term) ||
-      (c.phone || '').toLowerCase().includes(term) ||
-      (c.address || '').toLowerCase().includes(term)
-    );
-  });
-
-  // Pagination logic
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentClients = filteredClients.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+  const indexOfFirstItem = totalClients === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const indexOfLastItem = Math.min(currentPage * itemsPerPage, totalClients);
+  const currentClients = clients;
+  const totalPages = Math.max(1, Math.ceil(totalClients / itemsPerPage));
 
   const handlePrevPage = () => {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
@@ -205,7 +243,7 @@ export default function Clientes() {
             className="bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 w-full sm:w-64 transition-colors"
           />
           <div className="bg-gray-800 text-white px-4 py-2 rounded-lg border border-gray-700 font-semibold shadow-sm flex items-center justify-center">
-            Total: {filteredClients.length}
+            Total: {totalClients}
           </div>
           <button 
             onClick={() => openModal()}
@@ -280,7 +318,7 @@ export default function Clientes() {
                   </div>
                 </div>
               ))}
-              {filteredClients.length === 0 && (
+              {currentClients.length === 0 && (
                 <div className="px-6 py-8 text-center text-gray-500">No se encontraron clientes.</div>
               )}
             </div>
@@ -327,7 +365,7 @@ export default function Clientes() {
                         </td>
                       </tr>
                     ))}
-                    {filteredClients.length === 0 && (
+                    {currentClients.length === 0 && (
                       <tr>
                         <td colSpan="6" className="px-6 py-8 text-center text-gray-500">No se encontraron clientes.</td>
                       </tr>
@@ -337,10 +375,10 @@ export default function Clientes() {
             </div>
             
             {/* Pagination Controls */}
-            {filteredClients.length > 0 && (
+            {totalClients > 0 && (
                 <div className="bg-gray-900 p-4 border-t border-gray-700 flex items-center justify-between">
                     <span className="text-sm text-gray-400">
-                        Mostrando <span className="font-semibold text-white">{indexOfFirstItem + 1}</span> a <span className="font-semibold text-white">{Math.min(indexOfLastItem, filteredClients.length)}</span> de <span className="font-semibold text-white">{filteredClients.length}</span> clientes
+                        Mostrando <span className="font-semibold text-white">{indexOfFirstItem}</span> a <span className="font-semibold text-white">{indexOfLastItem}</span> de <span className="font-semibold text-white">{totalClients}</span> clientes
                     </span>
                     <div className="flex gap-2">
                         <button 

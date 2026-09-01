@@ -1,5 +1,6 @@
 from datetime import datetime
 from io import BytesIO
+from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
@@ -640,13 +641,32 @@ def update_product_stock(
 @router.get("/clients")
 def get_clients(
     installation_id: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=5000, ge=1, le=5000),
+    search: Optional[str] = Query(default=None),
+    paged: bool = Query(default=False),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
     client = get_integration_client_for_installation(db, current_user, installation_id)
-    payload = client.request("GET", "/api/clientes?page=1&page_size=5000")
+    params = {
+        "page": page,
+        "page_size": page_size,
+    }
+    if search:
+        params["search"] = search
+    payload = client.request("GET", f"/api/clientes?{urlencode(params)}")
     if isinstance(payload, dict):
-        return ((payload.get("data") or {}).get("items")) or payload.get("items") or []
+        payload_data = payload.get("data") or payload
+        items = payload_data.get("items") or []
+        if paged:
+            return {
+                "items": items,
+                "total": int(payload_data.get("total") or len(items)),
+                "page": int(payload_data.get("page") or page),
+                "page_size": int(payload_data.get("page_size") or page_size),
+            }
+        return items
     return payload if isinstance(payload, list) else []
 
 @router.post("/clients")
