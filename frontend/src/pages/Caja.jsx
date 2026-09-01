@@ -4,6 +4,20 @@ import LocationSyncBanner from '../components/LocationSyncBanner';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 import { useModal } from '../context/ModalContext';
 
+const readCachedData = (key) => {
+  if (!key) return null;
+  try {
+    return JSON.parse(sessionStorage.getItem(key) || 'null');
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedData = (key, value) => {
+  if (!key) return;
+  sessionStorage.setItem(key, JSON.stringify(value));
+};
+
 export default function Caja() {
   const REPORTS_PER_PAGE = 5;
   const SHIFT_MOVEMENTS_PER_PAGE = 4;
@@ -30,6 +44,7 @@ export default function Caja() {
   });
   const [submitting, setSubmitting] = useState(false);
   const isOffline = !!currentLocation && currentLocation.status !== 'ONLINE';
+  const cacheKey = currentLocation?.id ? `panel:caja:${currentLocation.id}` : null;
 
   const buildCashClosureHtml = (summaryPayload) => {
     const summary = summaryPayload?.shift_summary || summaryPayload || {};
@@ -196,29 +211,37 @@ export default function Caja() {
         return;
       }
 
-      await fetchCaja();
+      await fetchCaja(true);
     } catch (error) {
       console.error('Error deleting shift', error);
       showAlert({ title: 'Error al eliminar', message: 'Error al eliminar el turno.', tone: 'danger' });
     }
   };
 
-  const fetchCaja = async () => {
+  const applyCajaData = (data, resetView = true) => {
+    const validData = (Array.isArray(data) ? data : []).filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(String(row?.date || '').trim()));
+    setReportes(validData);
+    writeCachedData(cacheKey, validData);
+    if (resetView) {
+      setCurrentPage(1);
+      setMovementPages({});
+      setExpandedShifts({});
+      if (validData.length > 0) {
+        setExpandedDays({ [validData[0].date]: true });
+      }
+    }
+  };
+
+  const fetchCaja = async (background = false) => {
     try {
+      if (!background) setLoading(true);
       const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
       const res = await fetch(`/api/v1/data/caja/report${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        const validData = (Array.isArray(data) ? data : []).filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(String(row?.date || '').trim()));
-        setReportes(validData);
-        setCurrentPage(1);
-        setMovementPages({});
-        setExpandedShifts({});
-        if (validData.length > 0) {
-          setExpandedDays({ [validData[0].date]: true });
-        }
+        applyCajaData(data, !background);
       }
     } catch (e) {
       console.error("Error", e);
@@ -243,13 +266,19 @@ export default function Caja() {
   };
 
   useEffect(() => {
-    fetchCaja();
+    const cached = readCachedData(cacheKey);
+    if (Array.isArray(cached)) {
+      applyCajaData(cached, true);
+      setLoading(false);
+    }
+
+    fetchCaja(Boolean(cached));
     fetchEmployees();
     const unsubscribe = subscribePanelSync((detail) => {
       if (detail?.modules && !detail.modules.some((module) => ['cash', 'dashboard', 'users', 'employees'].includes(module))) {
         return;
       }
-      fetchCaja();
+      fetchCaja(true);
       if (!detail?.modules || detail.modules.includes('employees') || detail.modules.includes('users')) {
         fetchEmployees();
       }

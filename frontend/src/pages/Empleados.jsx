@@ -3,6 +3,21 @@ import { useAuth } from '../context/AuthContext';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 import { useModal } from '../context/ModalContext';
 
+const readCachedData = (key) => {
+  if (!key) return null;
+  try {
+    return JSON.parse(sessionStorage.getItem(key) || 'null');
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedData = (key, patch) => {
+  if (!key) return;
+  const current = readCachedData(key) || {};
+  sessionStorage.setItem(key, JSON.stringify({ ...current, ...patch }));
+};
+
 const formatNovedadDate = (value) => {
   if (!value) {
     return '-';
@@ -62,10 +77,12 @@ export default function Empleados() {
   const { token, currentLocation } = useAuth();
   const { showAlert, showConfirm } = useModal();
   const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
+  const [loadingNovedades, setLoadingNovedades] = useState(true);
   const [novedades, setNovedades] = useState([]);
   const [novedadesPage, setNovedadesPage] = useState(1);
   const NOVEDADES_PER_PAGE = 10;
+  const cacheKey = currentLocation?.id ? `panel:empleados:${currentLocation.id}` : null;
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -86,8 +103,9 @@ export default function Empleados() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = async (background = false) => {
     try {
+      if (!background) setLoadingEmployees(true);
       const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
       const res = await fetch(`/api/v1/data/employees${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -95,16 +113,18 @@ export default function Empleados() {
       if (res.ok) {
         const data = await res.json();
         setEmployees(data);
+        writeCachedData(cacheKey, { employees: data });
       }
     } catch (e) {
       console.error("Error fetching employees", e);
     } finally {
-      setLoading(false);
+      setLoadingEmployees(false);
     }
   };
 
-  const fetchNovedades = async () => {
+  const fetchNovedades = async (background = false) => {
     try {
+      if (!background) setLoadingNovedades(true);
       const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
       const res = await fetch(`/api/v1/data/employees/novedades${installationQuery}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -112,22 +132,35 @@ export default function Empleados() {
       if (res.ok) {
         const data = await res.json();
         setNovedades(data);
+        writeCachedData(cacheKey, { novedades: data });
         setNovedadesPage(1);
       }
     } catch (e) {
       console.error("Error fetching novedades", e);
+    } finally {
+      setLoadingNovedades(false);
     }
   };
 
   useEffect(() => {
-    fetchEmployees();
-    fetchNovedades();
+    const cached = readCachedData(cacheKey);
+    if (Array.isArray(cached?.employees)) {
+      setEmployees(cached.employees);
+      setLoadingEmployees(false);
+    }
+    if (Array.isArray(cached?.novedades)) {
+      setNovedades(cached.novedades);
+      setLoadingNovedades(false);
+    }
+
+    fetchEmployees(Boolean(cached?.employees));
+    fetchNovedades(Boolean(cached?.novedades));
     return subscribePanelSync((detail) => {
       if (detail?.modules && !detail.modules.some((module) => ['employees', 'cash'].includes(module))) {
         return;
       }
-      fetchEmployees();
-      fetchNovedades();
+      fetchEmployees(true);
+      fetchNovedades(true);
     });
   }, [token, currentLocation?.id]);
 
@@ -329,7 +362,7 @@ export default function Empleados() {
       </div>
 
       <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-lg mb-6">
-        {loading ? (
+        {loadingEmployees ? (
            <div className="p-8 text-center text-gray-500">Cargando datos...</div>
         ) : (
           <>
@@ -481,7 +514,9 @@ export default function Empleados() {
           <h3 className="font-bold text-white">Historial de Adelantos y Faltas</h3>
         </div>
         <div className="p-4 overflow-y-auto flex-1 space-y-3 bg-gray-800">
-          {paginatedNovedades.map((nov) => (
+          {loadingNovedades ? (
+            <p className="text-center text-gray-500 py-10 text-sm">Cargando historial...</p>
+          ) : paginatedNovedades.map((nov) => (
             <div key={nov.id} className="bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-700 hover:bg-gray-800 transition-colors">
                 <div>
                     <div className="flex items-start justify-between gap-3 mb-2">
@@ -508,7 +543,7 @@ export default function Empleados() {
                 </div>
             </div>
           ))}
-          {novedades.length === 0 && (
+          {!loadingNovedades && novedades.length === 0 && (
             <p className="text-center text-gray-500 py-10 text-sm">No hay adelantos ni faltas registrados.</p>
           )}
         </div>
