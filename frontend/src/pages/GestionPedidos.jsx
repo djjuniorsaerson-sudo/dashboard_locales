@@ -148,6 +148,9 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
   const getAddress = (order) =>
     String(order?.customer_address || order?.address || '').trim();
 
+  const getPhone = (order) =>
+    String(order?.customer_phone || order?.phone || '').trim();
+
   const getItemName = (item) =>
     String(item?.product_name || item?.name || '').trim() || 'Producto';
 
@@ -232,6 +235,11 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                         <User className="w-4 h-4 mr-1.5" />
                         {getClientName(order)}
                       </div>
+                      {getPhone(order) && (
+                        <div className="text-gray-500 text-xs mt-1 break-words max-w-[240px]">
+                          Tel: {getPhone(order)}
+                        </div>
+                      )}
                       {getAddress(order) && (
                         <div className="text-gray-500 text-xs mt-2 break-words max-w-[240px]">
                           {getAddress(order)}

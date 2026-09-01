@@ -458,8 +458,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
 
     try {
       const isEdit = !!orderToEdit;
+      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
       const url = isEdit
-        ? `/api/v1/data/pedidos/${orderToEdit.id}`
+        ? `/api/v1/data/pedidos/${orderToEdit.id}${installationQuery}`
         : `/api/v1/remote-actions/installations/${currentLocation.id}/create-order`;
       const method = isEdit ? 'PUT' : 'POST';
 

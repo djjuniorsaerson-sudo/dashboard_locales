@@ -108,7 +108,10 @@ def _fetch_active_orders_for_installation(db: Session, current_user: User, insta
     if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
-            parsed = client.request("GET", "/api/pedidos")
+            try:
+                parsed = client.request("GET", "/api/v1/data/cocina/pedidos")
+            except Exception:
+                parsed = client.request("GET", "/api/pedidos")
             orders = parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
             if not isinstance(orders, list):
                 raise RuntimeError("Remote active orders unavailable")
