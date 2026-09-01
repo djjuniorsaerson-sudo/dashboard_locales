@@ -235,8 +235,11 @@ export default function Caja() {
   const fetchCaja = async (background = false) => {
     try {
       if (!background) setLoading(true);
-      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
-      const res = await fetch(`/api/v1/data/caja/report${installationQuery}`, {
+      const params = new URLSearchParams({ days: '10' });
+      if (currentLocation?.id) {
+        params.set('installation_id', currentLocation.id);
+      }
+      const res = await fetch(`/api/v1/data/caja/report?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {

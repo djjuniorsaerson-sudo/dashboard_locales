@@ -169,7 +169,7 @@ def _queue_installation_action(
     return JSONResponse(status_code=202, content=response)
 
 
-def _build_remote_cashbox_report(client: YummyIntegrationClient):
+def _build_remote_cashbox_report(client: YummyIntegrationClient, days_limit: int = 10):
     initial_payload = _extract_remote_payload(client.request("GET", "/api/caja"))
     if not isinstance(initial_payload, dict):
         raise RuntimeError("Remote cashbox summary unavailable")
@@ -186,7 +186,9 @@ def _build_remote_cashbox_report(client: YummyIntegrationClient):
     global_shift_history = list(initial_payload.get("shift_history") or [])
     report = []
 
-    for date_value in available_dates[:30]:
+    safe_days_limit = max(1, min(int(days_limit or 10), 30))
+
+    for date_value in available_dates[:safe_days_limit]:
         day_payload = _extract_remote_payload(client.request("GET", f"/api/caja?date={date_value}"))
         if not isinstance(day_payload, dict):
             continue
@@ -840,6 +842,7 @@ def get_repartidores(
 @router.get("/caja/report")
 def get_caja_report(
     installation_id: Optional[str] = Query(default=None),
+    days: int = Query(default=10, ge=1, le=30),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
@@ -850,7 +853,7 @@ def get_caja_report(
     if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
-            report = _build_remote_cashbox_report(client)
+            report = _build_remote_cashbox_report(client, days_limit=days)
             if isinstance(report, list) and len(report) == 0:
                 client.check_health()
             if not isinstance(report, list):
