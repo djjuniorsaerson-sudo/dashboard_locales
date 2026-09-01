@@ -532,10 +532,8 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         setEditingCartItemKey(null);
         setForceDuplicate(false);
         if (isEdit) {
-          setTimeout(() => {
-            setOrderToEdit(null);
-            setCurrentView('gestion_pedidos');
-          }, 1500);
+          setOrderToEdit(null);
+          setCurrentView('gestion_pedidos');
         }
       } else if (res.status === 409 && !overrideDuplicate) {
         setDuplicateWarning(data.detail?.message || data.detail || "Ya existe un pedido activo para este cliente.");

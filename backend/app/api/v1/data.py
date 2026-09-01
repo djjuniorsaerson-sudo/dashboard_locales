@@ -1249,9 +1249,14 @@ async def update_pedido(
 ):
     try:
         data = await request.json()
-        client = get_integration_client_for_installation(db, current_user, installation_id)
-        payload = client.request("PUT", f"/api/pedidos/{order_id}", payload=data)
-        return payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+        install = get_installation_for_user(db, current_user, installation_id, online_only=True)
+        if not install:
+            raise HTTPException(status_code=404, detail="Local no encontrado o sin conexión.")
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        payload = client.request("PUT", f"/api/v1/data/pedidos/{order_id}", payload=data)
+        updated = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+        _fetch_active_orders_for_installation(db, current_user, str(install.id))
+        return updated
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
