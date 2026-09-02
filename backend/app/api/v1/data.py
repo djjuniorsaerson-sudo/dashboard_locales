@@ -100,7 +100,12 @@ AUDIT_LOGS_SNAPSHOT_KEY = "audit_logs_snapshot_v1"
 OFFLINE_FALLBACK_THRESHOLD_SECONDS = 20
 
 
-def _fetch_active_orders_for_installation(db: Session, current_user: User, installation_id: Optional[str] = None):
+def _fetch_active_orders_for_installation(
+    db: Session,
+    current_user: User,
+    installation_id: Optional[str] = None,
+    kitchen_view: bool = False,
+):
     install = get_installation_for_user(db, current_user, installation_id, online_only=False)
     if not install:
         return []
@@ -108,10 +113,8 @@ def _fetch_active_orders_for_installation(db: Session, current_user: User, insta
     if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
-            try:
-                parsed = client.request("GET", "/api/v1/data/cocina/pedidos")
-            except Exception:
-                parsed = client.request("GET", "/api/pedidos")
+            endpoint = "/api/v1/data/cocina/pedidos" if kitchen_view else "/api/pedidos"
+            parsed = client.request("GET", endpoint)
             orders = parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
             if not isinstance(orders, list):
                 raise RuntimeError("Remote active orders unavailable")
@@ -1122,10 +1125,11 @@ def dump_schema(db: Session = Depends(deps.get_yummy_db)):
 @router.get("/cocina/pedidos")
 def get_cocina_pedidos(
     installation_id: Optional[str] = Query(default=None),
+    kitchen_view: bool = Query(default=False),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    return _fetch_active_orders_for_installation(db, current_user, installation_id)
+    return _fetch_active_orders_for_installation(db, current_user, installation_id, kitchen_view=kitchen_view)
 
 
 @router.get("/pedidos/export/xlsx")

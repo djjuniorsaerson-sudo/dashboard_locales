@@ -28,7 +28,7 @@ export default function Cocina() {
 
   const fetchOrders = async () => {
     try {
-      const params = new URLSearchParams({ t: String(Date.now()) });
+      const params = new URLSearchParams({ t: String(Date.now()), kitchen_view: 'true' });
       if (currentLocation?.id) {
         params.set('installation_id', currentLocation.id);
       }

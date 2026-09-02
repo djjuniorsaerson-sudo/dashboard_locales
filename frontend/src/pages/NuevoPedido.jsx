@@ -414,6 +414,18 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const total = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const mixedTotal = ['efectivo', 'transferencia', 'debito', 'online']
     .reduce((acc, key) => acc + (parseFloat(paymentBreakdown[key]) || 0), 0);
+
+  const serializeAddonsForOrder = (addons = [], itemQuantity = 1) => {
+    const multiplier = Math.max(Number(itemQuantity || 1), 1);
+    return (addons || []).map((addon) => {
+      const singleQty = Math.max(Number(addon.qty || addon.quantity || 1), 1);
+      return {
+        ...addon,
+        qty: singleQty,
+        quantity: singleQty * multiplier,
+      };
+    });
+  };
   const mixedRemaining = Number((total - mixedTotal).toFixed(2));
 
   const [forceDuplicate, setForceDuplicate] = useState(false);
@@ -469,9 +481,9 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         stock_factor: item.stock_factor || 1,
         portion_type: item.portion_type || 'completo',
         price: item.price - calculateAddonsPrice(item.toppings || [], item.extras || [], item.guarniciones || []),
-        toppings: (item.toppings || []).map(t => ({...t, quantity: t.qty || 1})),
-        extras: (item.extras || []).map(e => ({...e, quantity: e.qty || 1})),
-        guarniciones: (item.guarniciones || []).map(g => ({...g, quantity: g.qty || 1}))
+        toppings: serializeAddonsForOrder(item.toppings, item.quantity),
+        extras: serializeAddonsForOrder(item.extras, item.quantity),
+        guarniciones: serializeAddonsForOrder(item.guarniciones, item.quantity)
       }))
     };
 

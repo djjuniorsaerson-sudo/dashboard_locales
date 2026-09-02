@@ -218,12 +218,45 @@ export default function Empleados() {
       });
       
       if (res.ok) {
-        await fetchEmployees();
-        await fetchNovedades();
+        const savedNovedad = await res.json().catch(() => ({}));
+        const amount = Number(formData.amount || 0);
+        const eventType = String(modalType || '').trim().toLowerCase();
+
+        if (savedNovedad?.id) {
+          setNovedades((current) => [
+            {
+              ...savedNovedad,
+              employee_id: savedNovedad.employee_id || selectedEmployee.id,
+              employee_name: savedNovedad.employee_name || selectedEmployee.name,
+              event_type: savedNovedad.event_type || modalType,
+              amount: Number(savedNovedad.amount || amount),
+              notes: savedNovedad.notes || formData.notes,
+              event_date: savedNovedad.event_date || new Date().toISOString(),
+            },
+            ...current,
+          ]);
+          setNovedadesPage(1);
+        }
+
+        if (eventType === 'adelanto' || eventType === 'falta') {
+          setEmployees((current) => current.map((employee) => {
+            if (employee.id !== selectedEmployee.id) return employee;
+            const currentAdelantos = Number(employee.adelantos || 0);
+            const currentFinalSalary = Number(employee.final_salary || 0);
+            return {
+              ...employee,
+              adelantos: currentAdelantos + amount,
+              final_salary: currentFinalSalary - amount,
+            };
+          }));
+        }
+
         closeModal();
+        Promise.allSettled([fetchEmployees(true), fetchNovedades(true)]);
         dispatchPanelSync({ modules: ['employees', 'cash'] });
       } else {
-        showAlert({ title: 'No se pudo registrar', message: 'Hubo un error al registrar la novedad', tone: 'danger' });
+        const error = await res.json().catch(() => ({}));
+        showAlert({ title: 'No se pudo registrar', message: error.detail || error.error || 'Hubo un error al registrar la novedad', tone: 'danger' });
       }
     } catch (error) {
       console.error("Error saving:", error);
