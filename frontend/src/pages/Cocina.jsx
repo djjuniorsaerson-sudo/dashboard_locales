@@ -28,7 +28,11 @@ export default function Cocina() {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch(`/api/v1/data/cocina/pedidos?t=${Date.now()}`, {
+      const params = new URLSearchParams({ t: String(Date.now()) });
+      if (currentLocation?.id) {
+        params.set('installation_id', currentLocation.id);
+      }
+      const res = await fetch(`/api/v1/data/cocina/pedidos?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -56,7 +60,7 @@ export default function Cocina() {
       clearInterval(interval);
       unsubscribe();
     };
-  }, [token]);
+  }, [token, currentLocation?.id]);
 
   const parseServerDateTime = (value) => {
     if (value instanceof Date) {
