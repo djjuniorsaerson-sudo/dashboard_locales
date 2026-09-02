@@ -745,8 +745,8 @@ def get_employees(
     if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
-            remote = deps.RemoteSession(client)
-            employees = ModulesExtractor.get_employees(remote)
+            payload = client.request("GET", "/api/integration/employees")
+            employees = _extract_remote_payload(payload)
             if employees_payload_has_error(employees):
                 raise RuntimeError("Remote employees snapshot unavailable")
             save_employees_snapshot(db, install.id, employees=employees)
@@ -770,8 +770,8 @@ def get_empleado_novedades(
     if installation_is_online(install):
         try:
             client = YummyIntegrationClient(install.base_url, install.api_key)
-            remote = deps.RemoteSession(client)
-            novedades = ModulesExtractor.get_empleado_novedades(remote)
+            payload = client.request("GET", "/api/integration/employees/novedades")
+            novedades = _extract_remote_payload(payload)
             if novedades_payload_has_error(novedades):
                 raise RuntimeError("Remote employees snapshot unavailable")
             save_employees_snapshot(db, install.id, novedades=novedades)
