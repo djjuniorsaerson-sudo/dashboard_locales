@@ -470,13 +470,13 @@ def load_installation_snapshot(
     row = (
         db.query(YummySnapshot)
         .filter(YummySnapshot.installation_id == installation_id)
+        .filter(YummySnapshot.snapshot_data["snapshot_key"].as_string() == snapshot_key)
         .order_by(YummySnapshot.created_at.desc())
-        .all()
+        .first()
     )
-    for snapshot in row:
-        data = snapshot.snapshot_data or {}
-        if data.get("snapshot_key") == snapshot_key:
-            return data.get("payload") or {}
+    if row:
+        data = row.snapshot_data or {}
+        return data.get("payload") or {}
     return None
 
 
