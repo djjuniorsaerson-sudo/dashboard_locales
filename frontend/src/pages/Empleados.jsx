@@ -36,7 +36,15 @@ const novedadTimestamp = (item) => {
   return Number(item?._localCreatedAt || 0);
 };
 
+const novedadSortOrder = (item) => {
+  const value = Number(item?.sort_order || 0);
+  if (value > 0) return value;
+  return 0;
+};
+
 const sortNovedades = (items = []) => [...items].sort((a, b) => {
+  const orderDiff = novedadSortOrder(b) - novedadSortOrder(a);
+  if (orderDiff !== 0) return orderDiff;
   const dateDiff = novedadTimestamp(b) - novedadTimestamp(a);
   if (dateDiff !== 0) return dateDiff;
   return String(b?.id || '').localeCompare(String(a?.id || ''), undefined, { numeric: true });
@@ -280,6 +288,7 @@ export default function Empleados() {
             notes: savedNovedad.notes || formData.notes,
             event_date: savedNovedad.event_date || new Date().toISOString(),
             sort_at: savedNovedad.sort_at || new Date().toISOString(),
+            sort_order: Number(savedNovedad.sort_order || Date.now()),
             _pendingLocal: true,
             _localCreatedAt: Date.now(),
           };
