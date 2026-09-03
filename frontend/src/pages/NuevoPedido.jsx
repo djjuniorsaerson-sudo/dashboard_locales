@@ -63,14 +63,25 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       });
       setAvailableAddresses(editAddress ? [{ client_id: orderToEdit.customer_id, address: editAddress }] : []);
       if (orderToEdit.items) {
-        setCart(orderToEdit.items.map((item, idx) => ({
-          ...item,
-          customKey: item.customKey || `imported-${item.id || idx}-${idx}`,
-          toppings: item.toppings || [],
-          extras: item.extras || [],
-          guarniciones: item.guarniciones || [],
-          product_name: item.name || item.product_name,
-        })));
+        setCart(orderToEdit.items.map((item, idx) => {
+          const itemQuantity = Math.max(Number(item.quantity || 1), 1);
+          const importedToppings = normalizeImportedAddonCollection(item.toppings, itemQuantity);
+          const importedExtras = normalizeImportedAddonCollection(item.extras, itemQuantity);
+          const importedGuarniciones = normalizeImportedAddonCollection(item.guarniciones, itemQuantity);
+          const basePrice = Number(item.basePrice ?? item.price ?? 0);
+          const unitAddonsTotal = calculateAddonsPrice(importedToppings, importedExtras, importedGuarniciones);
+
+          return {
+            ...item,
+            customKey: item.customKey || `imported-${item.id || idx}-${idx}`,
+            toppings: importedToppings,
+            extras: importedExtras,
+            guarniciones: importedGuarniciones,
+            product_name: item.name || item.product_name,
+            price: basePrice + unitAddonsTotal,
+            basePrice,
+          };
+        }));
       }
     } else {
       setCart([]); setPhone(''); setName(''); setAddress('');
@@ -198,6 +209,21 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
     (Array.isArray(items) ? items : [])
       .map(normalizeAddonEntry)
       .filter((entry) => entry.id > 0 || entry.name);
+
+  const normalizeImportedAddonCollection = (items = [], itemQuantity = 1) => {
+    const divisor = Math.max(Number(itemQuantity || 1), 1);
+    return (Array.isArray(items) ? items : [])
+      .map((entry) => {
+        const hasUnitQty = entry?.qty !== undefined && entry?.qty !== null;
+        const rawQty = Number(hasUnitQty ? entry.qty : (entry?.quantity || 1));
+        const unitQty = hasUnitQty ? rawQty : rawQty / divisor;
+        return normalizeAddonEntry({
+          ...entry,
+          qty: Math.max(unitQty, 1),
+        });
+      })
+      .filter((entry) => entry.id > 0 || entry.name);
+  };
 
   const createCartItemKey = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
