@@ -1261,6 +1261,19 @@ async def update_pedido(
         updated = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
         _fetch_active_orders_for_installation(db, current_user, str(install.id))
         return updated
+    except HTTPException:
+        raise
+    except requests.exceptions.HTTPError as e:
+        detail = str(e)
+        status_code = 502
+        response = getattr(e, "response", None)
+        if response is not None:
+            status_code = response.status_code
+            try:
+                detail = response.json().get("error") or response.json().get("detail") or detail
+            except ValueError:
+                detail = response.text or detail
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
