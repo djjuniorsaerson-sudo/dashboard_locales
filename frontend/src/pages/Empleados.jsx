@@ -18,6 +18,51 @@ const writeCachedData = (key, patch) => {
   sessionStorage.setItem(key, JSON.stringify({ ...current, ...patch }));
 };
 
+const novedadKey = (item) => String(item?.id || '');
+
+const novedadSignature = (item) => [
+  item?.employee_id || '',
+  String(item?.event_type || '').toLowerCase(),
+  Number(item?.amount || 0),
+  String(item?.notes || '').trim().toLowerCase(),
+  String(item?.event_date || '').slice(0, 10),
+].join('|');
+
+const novedadTimestamp = (item) => {
+  const rawDate = String(item?.event_date || item?._localDate || '');
+  const normalizedDate = rawDate.includes('T') ? rawDate : rawDate.replace(' ', 'T');
+  const parsedDate = Date.parse(normalizedDate);
+  if (!Number.isNaN(parsedDate)) return parsedDate;
+  return Number(item?._localCreatedAt || 0);
+};
+
+const sortNovedades = (items = []) => [...items].sort((a, b) => {
+  const dateDiff = novedadTimestamp(b) - novedadTimestamp(a);
+  if (dateDiff !== 0) return dateDiff;
+  return String(b?.id || '').localeCompare(String(a?.id || ''), undefined, { numeric: true });
+});
+
+const mergeNovedades = (current = [], incoming = []) => {
+  const merged = new Map();
+  const signatures = new Set();
+
+  incoming.forEach((item) => {
+    const key = novedadKey(item) || novedadSignature(item);
+    merged.set(key, item);
+    signatures.add(novedadSignature(item));
+  });
+
+  current.forEach((item) => {
+    if (!item?._pendingLocal) return;
+    const isRecent = Date.now() - Number(item._localCreatedAt || 0) < 5 * 60 * 1000;
+    if (!isRecent || signatures.has(novedadSignature(item))) return;
+    const key = novedadKey(item) || novedadSignature(item);
+    if (!merged.has(key)) merged.set(key, item);
+  });
+
+  return sortNovedades(Array.from(merged.values()));
+};
+
 const formatNovedadDate = (value) => {
   if (!value) {
     return '-';
@@ -131,9 +176,11 @@ export default function Empleados() {
       });
       if (res.ok) {
         const data = await res.json();
-        setNovedades(data);
-        writeCachedData(cacheKey, { novedades: data });
-        setNovedadesPage(1);
+        setNovedades((current) => {
+          const merged = mergeNovedades(current, data);
+          writeCachedData(cacheKey, { novedades: merged });
+          return merged;
+        });
       }
     } catch (e) {
       console.error("Error fetching novedades", e);
@@ -224,18 +271,22 @@ export default function Empleados() {
         const eventType = String(modalType || '').trim().toLowerCase();
 
         if (savedNovedad?.id) {
-          setNovedades((current) => [
-            {
-              ...savedNovedad,
-              employee_id: savedNovedad.employee_id || selectedEmployee.id,
-              employee_name: savedNovedad.employee_name || selectedEmployee.name,
-              event_type: savedNovedad.event_type || modalType,
-              amount: Number(savedNovedad.amount || amount),
-              notes: savedNovedad.notes || formData.notes,
-              event_date: savedNovedad.event_date || new Date().toISOString(),
-            },
-            ...current,
-          ]);
+          const localNovedad = {
+            ...savedNovedad,
+            employee_id: savedNovedad.employee_id || selectedEmployee.id,
+            employee_name: savedNovedad.employee_name || selectedEmployee.name,
+            event_type: savedNovedad.event_type || modalType,
+            amount: Number(savedNovedad.amount || amount),
+            notes: savedNovedad.notes || formData.notes,
+            event_date: savedNovedad.event_date || new Date().toISOString(),
+            _pendingLocal: true,
+            _localCreatedAt: Date.now(),
+          };
+          setNovedades((current) => {
+            const merged = mergeNovedades([localNovedad, ...current], []);
+            writeCachedData(cacheKey, { novedades: merged });
+            return merged;
+          });
           setNovedadesPage(1);
         }
 
