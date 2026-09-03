@@ -92,7 +92,7 @@ export default function Empleados() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
   // Form State
-  const [formData, setFormData] = useState({ amount: 0, notes: '' });
+  const [formData, setFormData] = useState({ amount: '', notes: '' });
   const [editForm, setEditForm] = useState({
     name: '',
     role: '',
@@ -167,7 +167,7 @@ export default function Empleados() {
   const handleOpenModal = (employee, type) => {
     setSelectedEmployee(employee);
     setModalType(type);
-    setFormData({ amount: 0, notes: '' });
+    setFormData({ amount: '', notes: '' });
     setIsModalOpen(true);
   };
 
@@ -202,6 +202,7 @@ export default function Empleados() {
       return;
     }
     setIsSaving(true);
+    const parsedAmount = Number(formData.amount || 0);
     
     try {
       const res = await fetch(`/api/v1/data/employees/${selectedEmployee.id}/novedad?installation_id=${encodeURIComponent(currentLocation.id)}`, {
@@ -212,14 +213,14 @@ export default function Empleados() {
         },
         body: JSON.stringify({
           event_type: modalType,
-          amount: Number(formData.amount || 0),
+          amount: parsedAmount,
           notes: formData.notes
         })
       });
       
       if (res.ok) {
         const savedNovedad = await res.json().catch(() => ({}));
-        const amount = Number(formData.amount || 0);
+        const amount = parsedAmount;
         const eventType = String(modalType || '').trim().toLowerCase();
 
         if (savedNovedad?.id) {
@@ -636,7 +637,7 @@ export default function Empleados() {
                   min="0"
                   step="0.01"
                   value={formData.amount}
-                  onChange={(e) => setFormData({...formData, amount: parseFloat(e.target.value) || 0})}
+                  onChange={(e) => setFormData({...formData, amount: e.target.value})}
                   className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               </div>
