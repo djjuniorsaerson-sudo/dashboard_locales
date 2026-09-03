@@ -29,7 +29,7 @@ const novedadSignature = (item) => [
 ].join('|');
 
 const novedadTimestamp = (item) => {
-  const rawDate = String(item?.event_date || item?._localDate || '');
+  const rawDate = String(item?.sort_at || item?.event_date || item?._localDate || '');
   const normalizedDate = rawDate.includes('T') ? rawDate : rawDate.replace(' ', 'T');
   const parsedDate = Date.parse(normalizedDate);
   if (!Number.isNaN(parsedDate)) return parsedDate;
@@ -279,6 +279,7 @@ export default function Empleados() {
             amount: Number(savedNovedad.amount || amount),
             notes: savedNovedad.notes || formData.notes,
             event_date: savedNovedad.event_date || new Date().toISOString(),
+            sort_at: savedNovedad.sort_at || new Date().toISOString(),
             _pendingLocal: true,
             _localCreatedAt: Date.now(),
           };
@@ -624,7 +625,7 @@ export default function Empleados() {
                     </div>
                     <div className="text-xs text-gray-400 mb-1">Monto Descontado: <span className="font-bold text-red-400">-${nov.amount.toLocaleString()}</span></div>
                     <div className="text-xs text-gray-400 mb-1">Motivo: <span className="italic text-gray-300">{nov.notes}</span></div>
-                    <div className="text-xs text-gray-500 mt-2">Fecha: {formatNovedadDate(nov.event_date)}</div>
+                    <div className="text-xs text-gray-500 mt-2">Fecha: {formatNovedadDate(nov.sort_at || nov.event_date)}</div>
                 </div>
             </div>
           ))}

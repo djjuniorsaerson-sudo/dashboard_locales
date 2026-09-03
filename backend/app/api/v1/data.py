@@ -745,17 +745,16 @@ def get_employees(
     if not install:
         return []
 
-    if installation_is_online(install):
-        try:
-            client = YummyIntegrationClient(install.base_url, install.api_key)
-            payload = client.request("GET", "/api/integration/employees")
-            employees = _extract_remote_payload(payload)
-            if employees_payload_has_error(employees):
-                raise RuntimeError("Remote employees snapshot unavailable")
-            save_employees_snapshot(db, install.id, employees=employees)
-            return employees
-        except Exception:
-            pass
+    try:
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        payload = client.request("GET", "/api/integration/employees")
+        employees = _extract_remote_payload(payload)
+        if employees_payload_has_error(employees):
+            raise RuntimeError("Remote employees snapshot unavailable")
+        save_employees_snapshot(db, install.id, employees=employees)
+        return employees
+    except Exception:
+        pass
 
     snapshot = load_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY) or {}
     return snapshot.get("employees", [])
@@ -770,17 +769,16 @@ def get_empleado_novedades(
     if not install:
         return []
 
-    if installation_is_online(install):
-        try:
-            client = YummyIntegrationClient(install.base_url, install.api_key)
-            payload = client.request("GET", "/api/integration/employees/novedades")
-            novedades = _extract_remote_payload(payload)
-            if novedades_payload_has_error(novedades):
-                raise RuntimeError("Remote employees snapshot unavailable")
-            save_employees_snapshot(db, install.id, novedades=novedades)
-            return novedades
-        except Exception:
-            pass
+    try:
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        payload = client.request("GET", "/api/integration/employees/novedades")
+        novedades = _extract_remote_payload(payload)
+        if novedades_payload_has_error(novedades):
+            raise RuntimeError("Remote employees snapshot unavailable")
+        save_employees_snapshot(db, install.id, novedades=novedades)
+        return novedades
+    except Exception:
+        pass
 
     snapshot = load_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY) or {}
     return snapshot.get("novedades", [])
