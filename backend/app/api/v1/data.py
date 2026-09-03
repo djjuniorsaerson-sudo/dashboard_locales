@@ -811,7 +811,7 @@ def delete_empleado_novedad(
         payment_id = normalized_event_id.split("pago-", 1)[1].strip()
         if not payment_id.isdigit():
             raise HTTPException(status_code=400, detail="ID de pago inválido")
-        payload = client.request("DELETE", f"/api/empleado-pagos/{payment_id}")
+        payload = client.request("DELETE", f"/api/integration/employee-payments/{payment_id}")
     else:
         payload = client.request("DELETE", f"/api/integration/employee-events/{normalized_event_id}")
     if isinstance(payload, dict) and "data" in payload:

@@ -418,6 +418,11 @@ export default function Empleados() {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.detail || 'No se pudo eliminar la novedad');
       }
+      setNovedades((current) => {
+        const next = current.filter((item) => String(item.id) !== String(nov.id));
+        writeCachedData(cacheKey, { novedades: next });
+        return next;
+      });
       await fetchEmployees();
       await fetchNovedades();
       dispatchPanelSync({ modules: ['employees', 'cash'] });
