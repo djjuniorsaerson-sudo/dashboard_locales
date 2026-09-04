@@ -513,6 +513,43 @@ def novedades_payload_has_error(payload: list[dict]) -> bool:
     return str(first.get("id")) == "999" or str(first.get("event_type", "")).strip().lower() == "error"
 
 
+def employee_novedades_from_rows(employees: list[dict]) -> list[dict]:
+    def sort_value(value):
+        text = str(value or "").replace("pago-", "").strip()
+        return int(text) if text.isdigit() else 0
+
+    rows = []
+    for employee in employees or []:
+        employee_id = employee.get("id")
+        employee_name = employee.get("name") or employee.get("employee_name") or ""
+        for event in employee.get("events", []) or []:
+            rows.append({
+                "id": event.get("id"),
+                "employee_id": event.get("employee_id") or employee_id,
+                "employee_name": event.get("employee_name") or employee_name,
+                "event_type": event.get("event_type") or "adelanto",
+                "amount": event.get("amount") or 0,
+                "event_date": event.get("event_date") or event.get("date") or "",
+                "sort_at": event.get("sort_at") or event.get("created_at") or event.get("event_date") or "",
+                "sort_order": event.get("sort_order") or event.get("id") or 0,
+                "notes": event.get("notes") or "",
+            })
+        for payment in employee.get("payments", []) or []:
+            payment_id = str(payment.get("id") or "")
+            rows.append({
+                "id": payment_id if payment_id.startswith("pago-") else f"pago-{payment_id}",
+                "employee_id": payment.get("employee_id") or employee_id,
+                "employee_name": payment.get("employee_name") or employee_name,
+                "event_type": payment.get("event_type") or payment.get("payment_type") or "adelanto",
+                "amount": payment.get("amount") or 0,
+                "event_date": payment.get("event_date") or payment.get("payment_date") or "",
+                "sort_at": payment.get("sort_at") or payment.get("created_at") or payment.get("payment_date") or "",
+                "sort_order": payment.get("sort_order") or payment.get("id") or 0,
+                "notes": payment.get("notes") or "",
+            })
+    return sorted(rows, key=lambda item: (sort_value(item.get("sort_order")), str(item.get("id") or "")), reverse=True)
+
+
 def get_integration_client_for_installation(
     db: Session,
     current_user: User,
@@ -775,13 +812,19 @@ def get_empleado_novedades(
         novedades = _extract_remote_payload(payload)
         if novedades_payload_has_error(novedades):
             raise RuntimeError("Remote employees snapshot unavailable")
+        if not novedades:
+            employee_payload = client.request("GET", "/api/integration/employees")
+            novedades = employee_novedades_from_rows(_extract_remote_payload(employee_payload) or [])
         save_employees_snapshot(db, install.id, novedades=novedades)
         return novedades
     except Exception:
         pass
 
     snapshot = load_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY) or {}
-    return snapshot.get("novedades", [])
+    novedades = snapshot.get("novedades", [])
+    if novedades:
+        return novedades
+    return employee_novedades_from_rows(snapshot.get("employees", []))
 
 @router.post("/employees/{employee_id}/novedad")
 def add_empleado_novedad(
