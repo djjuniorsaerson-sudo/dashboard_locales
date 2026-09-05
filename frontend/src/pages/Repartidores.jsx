@@ -195,7 +195,42 @@ export default function Repartidores() {
   };
 
   const normalizeSearch = (value) => String(value || '').toLowerCase().trim();
-  const filteredDeliveredOrders = deliveredOrders.filter((row) => {
+  const historyDeliveredOrders = (globalHistory || [])
+    .filter((row) => Number(row.order_id || row.pedido_id || 0) > 0)
+    .filter((row) => {
+      const movementType = normalizeSearch(row.movement_type || row.status);
+      return !['vuelto', 'retiro', 'transfer_out', 'transfer_in', 'devolucion', 'devuelto'].includes(movementType);
+    })
+    .map((row) => ({
+      order_id: Number(row.order_id || row.pedido_id || 0),
+      driver_name: row.repartidor_name || row.driver_name || '',
+      cashier_name: row.cashier_name || '',
+      customer_address: getTripDestination(row),
+      total_amount: Number(row.total_amount || 0),
+      change_amount: Number(row.change_amount || 0),
+      marked_at: row.assigned_at || row.created_at || row.order_created_at || '',
+      source: 'history',
+    }));
+  const deliveredByOrder = new Map();
+  (deliveredOrders || []).forEach((row) => {
+    const orderId = Number(row.order_id || 0);
+    if (orderId > 0) {
+      deliveredByOrder.set(orderId, { ...row, order_id: orderId, source: row.source || 'exit' });
+    }
+  });
+  historyDeliveredOrders.forEach((row) => {
+    if (row.order_id > 0 && !deliveredByOrder.has(row.order_id)) {
+      deliveredByOrder.set(row.order_id, row);
+    }
+  });
+  const combinedDeliveredOrders = [...deliveredByOrder.values()].sort((a, b) => {
+    const dateCompare = String(b.marked_at || '').localeCompare(String(a.marked_at || ''));
+    if (dateCompare !== 0) {
+      return dateCompare;
+    }
+    return Number(b.order_id || 0) - Number(a.order_id || 0);
+  });
+  const filteredDeliveredOrders = combinedDeliveredOrders.filter((row) => {
     const searchTerm = normalizeSearch(deliveredSearch);
     if (!searchTerm) {
       return true;

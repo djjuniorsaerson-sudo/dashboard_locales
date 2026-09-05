@@ -1095,6 +1095,54 @@ def get_global_repartidor_history(
     return payload
 
 
+def merge_repartidores_delivered(delivered_payload, history_payload):
+    delivered_rows = delivered_payload if isinstance(delivered_payload, list) else []
+    history_rows = history_payload if isinstance(history_payload, list) else []
+    rows_by_order = {}
+    for row in delivered_rows:
+        if not isinstance(row, dict):
+            continue
+        order_id = int(row.get("order_id") or 0)
+        if order_id > 0:
+            rows_by_order[order_id] = {
+                **row,
+                "order_id": order_id,
+                "source": row.get("source") or "exit",
+            }
+    ignored_movement_types = {"vuelto", "retiro", "transfer_out", "transfer_in", "devolucion", "devuelto"}
+    for row in history_rows:
+        if not isinstance(row, dict):
+            continue
+        order_id = int(row.get("order_id") or row.get("pedido_id") or 0)
+        if order_id <= 0 or order_id in rows_by_order:
+            continue
+        movement_type = str(row.get("movement_type") or row.get("status") or "").strip().lower()
+        if movement_type in ignored_movement_types:
+            continue
+        rows_by_order[order_id] = {
+            "order_id": order_id,
+            "driver_name": str(row.get("repartidor_name") or row.get("driver_name") or "").strip(),
+            "cashier_name": str(row.get("cashier_name") or "").strip(),
+            "customer_address": str(
+                row.get("customer_address")
+                or row.get("address")
+                or row.get("destination_address")
+                or row.get("delivery_address")
+                or row.get("destino")
+                or ""
+            ).strip(),
+            "total_amount": float(row.get("total_amount") or 0),
+            "change_amount": float(row.get("change_amount") or 0),
+            "marked_at": str(row.get("assigned_at") or row.get("created_at") or row.get("order_created_at") or "").strip(),
+            "source": "history",
+        }
+    return sorted(
+        rows_by_order.values(),
+        key=lambda row: (str(row.get("marked_at") or ""), int(row.get("order_id") or 0)),
+        reverse=True,
+    )
+
+
 @router.get("/repartidores/delivered")
 def get_repartidores_delivered(
     installation_id: Optional[str] = Query(default=None),
@@ -1102,10 +1150,11 @@ def get_repartidores_delivered(
     current_user: User = Depends(deps.get_current_user),
 ):
     client = get_integration_client_for_installation(db, current_user, installation_id)
-    payload = client.request("GET", "/api/integration/repartidores/delivered")
-    if isinstance(payload, dict) and "data" in payload:
-        return payload["data"]
-    return payload
+    delivered_payload = client.request("GET", "/api/integration/repartidores/delivered")
+    history_payload = client.request("GET", "/api/integration/repartidores/history")
+    delivered_rows = delivered_payload.get("data") if isinstance(delivered_payload, dict) and "data" in delivered_payload else delivered_payload
+    history_rows = history_payload.get("data") if isinstance(history_payload, dict) and "data" in history_payload else history_payload
+    return merge_repartidores_delivered(delivered_rows, history_rows)
 
 
 @router.get("/repartidores/export/xlsx")
