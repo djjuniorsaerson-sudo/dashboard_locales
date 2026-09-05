@@ -110,26 +110,38 @@ def _fetch_active_orders_for_installation(
     if not install:
         return []
 
-    if installation_is_online(install):
-        try:
-            client = YummyIntegrationClient(install.base_url, install.api_key)
-            endpoint = "/api/v1/data/cocina/pedidos" if kitchen_view else "/api/pedidos"
-            parsed = client.request("GET", endpoint)
-            orders = parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
-            if not isinstance(orders, list):
-                raise RuntimeError("Remote active orders unavailable")
-            save_installation_snapshot(
-                db,
-                install.id,
-                ACTIVE_ORDERS_SNAPSHOT_KEY,
-                {"orders": orders},
-            )
-            return orders
-        except Exception as e:
-            print("Error fetching pedidos:", e)
+    try:
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        endpoint = "/api/v1/data/cocina/pedidos" if kitchen_view else "/api/pedidos"
+        parsed = client.request("GET", endpoint)
+        orders = parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
+        if not isinstance(orders, list):
+            raise RuntimeError("Remote active orders unavailable")
+        save_installation_snapshot(
+            db,
+            install.id,
+            ACTIVE_ORDERS_SNAPSHOT_KEY,
+            {"orders": orders},
+        )
+        return orders
+    except Exception as e:
+        print("Error fetching pedidos:", e)
 
     snapshot = load_installation_snapshot(db, install.id, ACTIVE_ORDERS_SNAPSHOT_KEY) or {}
     return snapshot.get("orders", [])
+
+
+def remove_active_order_from_snapshot(db: Session, installation_id, order_id: int):
+    target_id = int(order_id or 0)
+    if target_id <= 0:
+        return
+    snapshot = load_installation_snapshot(db, installation_id, ACTIVE_ORDERS_SNAPSHOT_KEY) or {}
+    orders = [
+        order
+        for order in snapshot.get("orders", []) or []
+        if int(order.get("id") or 0) != target_id
+    ]
+    save_installation_snapshot(db, installation_id, ACTIVE_ORDERS_SNAPSHOT_KEY, {"orders": orders})
 
 
 def _extract_remote_payload(payload):
@@ -1336,9 +1348,9 @@ async def update_pedido(
 ):
     try:
         data = await request.json()
-        install = get_installation_for_user(db, current_user, installation_id, online_only=True)
+        install = get_installation_for_user(db, current_user, installation_id, online_only=False)
         if not install:
-            raise HTTPException(status_code=404, detail="Local no encontrado o sin conexión.")
+            raise HTTPException(status_code=404, detail="Local no encontrado.")
         client = YummyIntegrationClient(install.base_url, install.api_key)
         payload = client.request("PUT", f"/api/v1/data/pedidos/{order_id}", payload=data)
         updated = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
@@ -1356,6 +1368,8 @@ async def update_pedido(
                 detail = response.json().get("error") or response.json().get("detail") or detail
             except ValueError:
                 detail = response.text or detail
+            if status_code in {400, 404} and any(text in str(detail).lower() for text in ["no encontrado", "cerrado", "cancelado"]):
+                remove_active_order_from_snapshot(db, install.id, order_id)
         raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1368,9 +1382,29 @@ async def cancel_pedido(
     current_user: User = Depends(deps.get_current_user),
 ):
     try:
-        client = get_integration_client_for_installation(db, current_user, installation_id)
+        install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+        if not install:
+            raise HTTPException(status_code=404, detail="Instalación no encontrada")
+        client = YummyIntegrationClient(install.base_url, install.api_key)
         payload = client.request("DELETE", f"/api/pedidos/{order_id}")
+        remove_active_order_from_snapshot(db, install.id, order_id)
         return payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+    except HTTPException:
+        raise
+    except requests.exceptions.HTTPError as e:
+        detail = str(e)
+        status_code = 502
+        response = getattr(e, "response", None)
+        if response is not None:
+            status_code = response.status_code
+            try:
+                detail = response.json().get("error") or response.json().get("detail") or detail
+            except ValueError:
+                detail = response.text or detail
+            if status_code in {400, 404} and any(text in str(detail).lower() for text in ["no encontrado", "cerrado", "cancelado"]):
+                remove_active_order_from_snapshot(db, install.id, order_id)
+                return {"deleted": True, "stale": True}
+        raise HTTPException(status_code=status_code, detail=detail)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
