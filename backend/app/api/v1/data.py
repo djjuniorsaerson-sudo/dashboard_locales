@@ -499,6 +499,35 @@ def save_employees_snapshot(
     save_installation_snapshot(db, installation_id, EMPLOYEES_SNAPSHOT_KEY, next_payload)
 
 
+def remove_employee_novedad_from_snapshot(db: Session, installation_id, event_id: str):
+    normalized_id = str(event_id or "").strip()
+    if not normalized_id:
+        return
+
+    current_payload = load_installation_snapshot(db, installation_id, EMPLOYEES_SNAPSHOT_KEY) or {}
+    novedades = [
+        item
+        for item in current_payload.get("novedades", []) or []
+        if str(item.get("id")) != normalized_id
+    ]
+    employees = []
+    for employee in current_payload.get("employees", []) or []:
+        next_employee = dict(employee)
+        next_employee["events"] = [
+            item
+            for item in next_employee.get("events", []) or []
+            if str(item.get("id")) != normalized_id
+        ]
+        next_employee["payments"] = [
+            item
+            for item in next_employee.get("payments", []) or []
+            if str(item.get("id")) != normalized_id
+            and f"pago-{item.get('id')}" != normalized_id
+        ]
+        employees.append(next_employee)
+    save_employees_snapshot(db, installation_id, employees=employees, novedades=novedades)
+
+
 def employees_payload_has_error(payload: list[dict]) -> bool:
     if not payload:
         return False
@@ -848,15 +877,28 @@ def delete_empleado_novedad(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    client = get_integration_client_for_installation(db, current_user, installation_id)
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        raise HTTPException(status_code=404, detail="Instalación no encontrada")
+    client = YummyIntegrationClient(install.base_url, install.api_key)
     normalized_event_id = str(event_id or "").strip()
-    if normalized_event_id.startswith("pago-"):
-        payment_id = normalized_event_id.split("pago-", 1)[1].strip()
-        if not payment_id.isdigit():
-            raise HTTPException(status_code=400, detail="ID de pago inválido")
-        payload = client.request("DELETE", f"/api/integration/employee-payments/{payment_id}")
-    else:
-        payload = client.request("DELETE", f"/api/integration/employee-events/{normalized_event_id}")
+    try:
+        if normalized_event_id.startswith("pago-"):
+            payment_id = normalized_event_id.split("pago-", 1)[1].strip()
+            if not payment_id.isdigit():
+                raise HTTPException(status_code=400, detail="ID de pago inválido")
+            payload = client.request("DELETE", f"/api/integration/employee-payments/{payment_id}")
+        else:
+            payload = client.request("DELETE", f"/api/integration/employee-events/{normalized_event_id}")
+    except HTTPException:
+        raise
+    except requests.exceptions.HTTPError as e:
+        if getattr(e, "response", None) is not None and e.response.status_code == 404:
+            remove_employee_novedad_from_snapshot(db, install.id, normalized_event_id)
+            return {"deleted": True, "stale": True}
+        raise
+
+    remove_employee_novedad_from_snapshot(db, install.id, normalized_event_id)
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
