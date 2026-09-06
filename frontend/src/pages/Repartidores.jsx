@@ -204,7 +204,7 @@ export default function Repartidores() {
     .map((row) => ({
       order_id: Number(row.order_id || row.pedido_id || 0),
       driver_name: row.repartidor_name || row.driver_name || '',
-      cashier_name: row.cashier_name || '',
+      cashier_name: row.cashier_name || row.created_by_username || row.created_by || row.cashier || '',
       customer_address: getTripDestination(row),
       total_amount: Number(row.total_amount || 0),
       change_amount: Number(row.change_amount || 0),

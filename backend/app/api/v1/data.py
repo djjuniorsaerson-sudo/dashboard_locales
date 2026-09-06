@@ -1122,7 +1122,13 @@ def merge_repartidores_delivered(delivered_payload, history_payload):
         rows_by_order[order_id] = {
             "order_id": order_id,
             "driver_name": str(row.get("repartidor_name") or row.get("driver_name") or "").strip(),
-            "cashier_name": str(row.get("cashier_name") or "").strip(),
+            "cashier_name": str(
+                row.get("cashier_name")
+                or row.get("created_by_username")
+                or row.get("created_by")
+                or row.get("cashier")
+                or ""
+            ).strip(),
             "customer_address": str(
                 row.get("customer_address")
                 or row.get("address")
