@@ -457,6 +457,7 @@ export default function Repartidores() {
               <tr>
                 <th className="px-6 py-4">Pedido</th>
                 <th className="px-6 py-4">Repartidor</th>
+                <th className="px-6 py-4">Cajera</th>
                 <th className="px-6 py-4">Horario</th>
                 <th className="px-6 py-4">Dirección</th>
                 <th className="px-6 py-4">Pago</th>
@@ -469,6 +470,7 @@ export default function Repartidores() {
                 <tr key={`${row.order_id}-${row.marked_at}`} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
                   <td className="px-6 py-4 font-medium text-white">#{row.order_id}</td>
                   <td className="px-6 py-4 text-white">{row.driver_name || 'Sin repartidor'}</td>
+                  <td className="px-6 py-4 text-white">{row.cashier_name || row.created_by_username || row.created_by || row.cashier || '-'}</td>
                   <td className="px-6 py-4">{formatDateTime(row.marked_at)}</td>
                   <td className="px-6 py-4">{row.customer_address || '-'}</td>
                   <td className="px-6 py-4">
@@ -484,7 +486,7 @@ export default function Repartidores() {
               ))}
               {filteredDeliveredOrders.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                     {deliveredSearch.trim() ? 'No hay pedidos que coincidan con la búsqueda.' : 'No hay pedidos entregados desde salida delivery.'}
                   </td>
                 </tr>
