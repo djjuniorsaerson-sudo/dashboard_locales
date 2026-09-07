@@ -148,7 +148,7 @@ export default function Cocina() {
 
   const readyOrders = orders.filter((order) => {
     const normalizedStatus = String(order?.status || order?.state || '').trim().toLowerCase();
-    return ['listo', 'entregado'].includes(normalizedStatus) && order.archived === false;
+    return normalizedStatus === 'listo' && order.archived === false;
   });
 
   const isOrderPaid = (order) => {

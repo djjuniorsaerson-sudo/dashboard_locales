@@ -114,7 +114,6 @@ FINAL_ORDER_STATES = {
     "entregado",
     "entregada",
     "delivered",
-    "completed",
 }
 
 
@@ -140,7 +139,7 @@ def normalize_order_state(value) -> str:
         "cancelled": "cancelado",
         "canceled": "cancelado",
         "delivered": "entregado",
-        "completed": "entregado",
+        "completed": "listo",
     }
     return aliases.get(text, text)
 
@@ -150,7 +149,7 @@ def panel_active_order(order: dict) -> bool:
         return False
     if bool(order.get("archived")):
         return False
-    state = normalize_order_state(order.get("state") or order.get("status"))
+    state = normalize_order_state(order.get("status") or order.get("state"))
     return state not in FINAL_ORDER_STATES
 
 
