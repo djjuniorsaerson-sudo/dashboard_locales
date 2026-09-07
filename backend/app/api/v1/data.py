@@ -13,6 +13,7 @@ from app.models.yummy import YummyInstallation, YummySnapshot
 import requests
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
+import re
 
 router = APIRouter()
 
@@ -1196,6 +1197,19 @@ def get_global_repartidor_history(
 def merge_repartidores_delivered(delivered_payload, history_payload):
     delivered_rows = delivered_payload if isinstance(delivered_payload, list) else []
     history_rows = history_payload if isinstance(history_payload, list) else []
+    change_by_order = {}
+    for row in history_rows:
+        if not isinstance(row, dict):
+            continue
+        movement_type = str(row.get("movement_type") or row.get("status") or "").strip().lower()
+        if movement_type != "vuelto":
+            continue
+        match = re.search(r"pedido\s*#?\s*(\d+)", str(row.get("notes") or ""), re.IGNORECASE)
+        if not match:
+            continue
+        order_id = safe_int(match.group(1))
+        if order_id > 0:
+            change_by_order[order_id] = round(change_by_order.get(order_id, 0) + safe_float(row.get("total_amount") or row.get("amount")), 2)
     rows_by_order = {}
     for row in delivered_rows:
         if not isinstance(row, dict):
@@ -1205,6 +1219,7 @@ def merge_repartidores_delivered(delivered_payload, history_payload):
             rows_by_order[order_id] = {
                 **row,
                 "order_id": order_id,
+                "change_amount": safe_float(row.get("change_amount")) or change_by_order.get(order_id, 0),
                 "source": row.get("source") or "exit",
             }
     ignored_movement_types = {"vuelto", "retiro", "transfer_out", "transfer_in", "devolucion", "devuelto"}
@@ -1236,7 +1251,7 @@ def merge_repartidores_delivered(delivered_payload, history_payload):
                 or ""
             ).strip(),
             "total_amount": safe_float(row.get("total_amount")),
-            "change_amount": safe_float(row.get("change_amount")),
+            "change_amount": safe_float(row.get("change_amount")) or change_by_order.get(order_id, 0),
             "marked_at": str(row.get("assigned_at") or row.get("created_at") or row.get("order_created_at") or "").strip(),
             "source": "history",
         }

@@ -195,6 +195,21 @@ export default function Repartidores() {
   };
 
   const normalizeSearch = (value) => String(value || '').toLowerCase().trim();
+  const changeByOrder = new Map();
+  (globalHistory || []).forEach((row) => {
+    const movementType = normalizeSearch(row.movement_type || row.status);
+    if (movementType !== 'vuelto') {
+      return;
+    }
+    const match = String(row.notes || '').match(/pedido\s*#?\s*(\d+)/i);
+    if (!match) {
+      return;
+    }
+    const orderId = Number(match[1] || 0);
+    if (orderId > 0) {
+      changeByOrder.set(orderId, Number(changeByOrder.get(orderId) || 0) + Number(row.total_amount || row.amount || 0));
+    }
+  });
   const historyDeliveredOrders = (globalHistory || [])
     .filter((row) => Number(row.order_id || row.pedido_id || 0) > 0)
     .filter((row) => {
@@ -207,7 +222,7 @@ export default function Repartidores() {
       cashier_name: row.cashier_name || row.created_by_username || row.created_by || row.cashier || '',
       customer_address: getTripDestination(row),
       total_amount: Number(row.total_amount || 0),
-      change_amount: Number(row.change_amount || 0),
+      change_amount: Number(row.change_amount || 0) || Number(changeByOrder.get(Number(row.order_id || row.pedido_id || 0)) || 0),
       marked_at: row.assigned_at || row.created_at || row.order_created_at || '',
       source: 'history',
     }));
@@ -215,7 +230,12 @@ export default function Repartidores() {
   (deliveredOrders || []).forEach((row) => {
     const orderId = Number(row.order_id || 0);
     if (orderId > 0) {
-      deliveredByOrder.set(orderId, { ...row, order_id: orderId, source: row.source || 'exit' });
+      deliveredByOrder.set(orderId, {
+        ...row,
+        order_id: orderId,
+        change_amount: Number(row.change_amount || 0) || Number(changeByOrder.get(orderId) || 0),
+        source: row.source || 'exit',
+      });
     }
   });
   historyDeliveredOrders.forEach((row) => {
