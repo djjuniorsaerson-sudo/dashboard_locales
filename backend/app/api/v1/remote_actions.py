@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException
@@ -117,7 +117,10 @@ def enqueue_create_order(
 ) -> Any:
     installation = get_installation_for_user(db, installation_id, current_user)
     action_payload = remote_actor_payload(payload.model_dump(), current_user)
+    action_id = uuid4()
+    action_payload["_operation_id"] = str(action_id)
     action = RemoteAction(
+        id=action_id,
         installation_id=installation.id,
         created_by_user_id=current_user.id,
         action_type="CREATE_ORDER",
@@ -125,7 +128,7 @@ def enqueue_create_order(
         payload=action_payload,
     )
     db.add(action)
-    db.flush()
+    db.commit()
 
     try:
         response = requests.post(
@@ -135,12 +138,17 @@ def enqueue_create_order(
             timeout=15,
         )
         response_data = response.json()
+        if response.status_code >= 500:
+            raise requests.RequestException(f"Error temporal de Yummy (HTTP {response.status_code})")
         if response.status_code >= 400:
-            detail = response_data.get("error") or response_data.get("message") or response.text
+            detail = (response_data.get("error") or response_data.get("message")) if isinstance(response_data, dict) else response.text
             if response.status_code == 409:
                 raise HTTPException(status_code=409, detail=detail)
             raise HTTPException(status_code=502, detail=detail)
 
+        if not isinstance(response_data, dict) or response_data.get("ok") is not True:
+            raise requests.RequestException("Yummy no confirmó el pedido")
+        db.refresh(action, with_for_update=True)
         action.status = RemoteActionStatus.COMPLETED
         action.result_payload = response_data
         action.error_message = None
@@ -154,12 +162,22 @@ def enqueue_create_order(
             "result": response_data,
         }
     except HTTPException as exc:
+        db.refresh(action, with_for_update=True)
+        if action.status == RemoteActionStatus.COMPLETED:
+            db.commit()
+            saved = action.result_payload or {}
+            return {"id": str(action.id), "status": "COMPLETED", "installation_id": str(installation.id), "result": saved.get("body", saved)}
         action.status = RemoteActionStatus.FAILED
         action.error_message = str(exc.detail)
         db.add(action)
         db.commit()
         raise exc
     except requests.RequestException as exc:
+        db.refresh(action, with_for_update=True)
+        if action.status == RemoteActionStatus.COMPLETED:
+            db.commit()
+            saved = action.result_payload or {}
+            return {"id": str(action.id), "status": "COMPLETED", "installation_id": str(installation.id), "result": saved.get("body", saved)}
         queue_action_for_retry(action, f"Connector unreachable: {exc}")
         installation.connection_status = "OFFLINE"
         db.add(installation)

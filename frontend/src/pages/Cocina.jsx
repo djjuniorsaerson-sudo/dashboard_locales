@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, CheckCircle2 } from 'lucide-react';
@@ -11,42 +11,66 @@ export default function Cocina() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('kitchen1'); // kitchen1, kitchen2, listos
   const [config, setConfig] = useState(null);
+  const [configError, setConfigError] = useState('');
+  const [ordersError, setOrdersError] = useState('');
+  const configRequest = useRef(null);
+  const ordersRequest = useRef(null);
 
   const fetchConfig = async () => {
+    if (!currentLocation?.id) return;
+    configRequest.current?.abort();
+    const controller = new AbortController();
+    configRequest.current = controller;
     try {
-      const res = await fetch('/api/v1/data/cocina/config', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const res = await fetch(`/api/v1/data/cocina/config?installation_id=${encodeURIComponent(currentLocation.id)}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: controller.signal,
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'No se pudo cargar la configuración de cocina.');
+      if (!controller.signal.aborted) {
         setConfig(data);
+        setConfigError('');
       }
     } catch (e) {
-      console.error("Error fetching config", e);
+      if (!controller.signal.aborted) setConfigError(e.message || 'No se pudo cargar la configuración de cocina.');
     }
   };
 
   const fetchOrders = async () => {
+    if (!currentLocation?.id || ordersRequest.current) return;
+    const controller = new AbortController();
+    ordersRequest.current = controller;
     try {
       const params = new URLSearchParams({ t: String(Date.now()), kitchen_view: 'true' });
       if (currentLocation?.id) {
         params.set('installation_id', currentLocation.id);
       }
       const res = await fetch(`/api/v1/data/cocina/pedidos?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: controller.signal,
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'No se pudieron actualizar los pedidos.');
+      if (!Array.isArray(data)) throw new Error('La respuesta de pedidos no es válida.');
+      if (!controller.signal.aborted) {
         setOrders(data);
+        setOrdersError('');
       }
     } catch (e) {
-      console.error("Error fetching orders", e);
+      if (!controller.signal.aborted) setOrdersError(e.message || 'No se pudieron actualizar los pedidos.');
     } finally {
-      setLoading(false);
+      if (ordersRequest.current === controller) ordersRequest.current = null;
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
   useEffect(() => {
+    setConfig(null);
+    setOrders([]);
+    setConfigError('');
+    setOrdersError('');
+    setLoading(Boolean(currentLocation?.id));
     fetchConfig();
     fetchOrders();
     const interval = setInterval(fetchOrders, 4000); // Polling cada 4s
@@ -59,6 +83,10 @@ export default function Cocina() {
     return () => {
       clearInterval(interval);
       unsubscribe();
+      configRequest.current?.abort();
+      ordersRequest.current?.abort();
+      configRequest.current = null;
+      ordersRequest.current = null;
     };
   }, [token, currentLocation?.id]);
 
@@ -189,6 +217,11 @@ export default function Cocina() {
         onlineMessage="La cocina está leyendo pedidos en vivo."
         offlineMessage="La cocina puede mostrar el último estado sincronizado. Si el local cae, puede haber demora hasta reconectar."
       />
+      {(configError || ordersError) && (
+        <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+          {[configError, ordersError].filter(Boolean).join(' ')}
+        </div>
+      )}
       <div className="flex flex-col xl:flex-row justify-between xl:items-center gap-4">
         <div className="flex items-center gap-4">
           <div>
@@ -196,7 +229,7 @@ export default function Cocina() {
             <p className="text-gray-400">Monitor en Tiempo Real</p>
           </div>
           <button 
-            onClick={fetchOrders}
+            onClick={() => { fetchConfig(); fetchOrders(); }}
             className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-colors border border-gray-700 h-fit"
             title="Actualizar pedidos"
           >

@@ -628,10 +628,13 @@ def connector_complete_remote_action(
     action = db.query(RemoteAction).filter(
         RemoteAction.id == action_id,
         RemoteAction.installation_id == installation.id,
-    ).first()
+    ).with_for_update().first()
     if not action:
         raise HTTPException(status_code=404, detail="Remote action not found")
 
+    if action.status == RemoteActionStatus.COMPLETED:
+        db.commit()
+        return {"status": "completed"}
     action.status = RemoteActionStatus.COMPLETED
     action.result_payload = payload.result_payload
     action.error_message = None
@@ -650,10 +653,13 @@ def connector_fail_remote_action(
     action = db.query(RemoteAction).filter(
         RemoteAction.id == action_id,
         RemoteAction.installation_id == installation.id,
-    ).first()
+    ).with_for_update().first()
     if not action:
         raise HTTPException(status_code=404, detail="Remote action not found")
 
+    if action.status == RemoteActionStatus.COMPLETED:
+        db.commit()
+        return {"status": "completed"}
     action.status = RemoteActionStatus.FAILED
     action.result_payload = payload.result_payload
     action.error_message = payload.error_message or "Connector execution failed"

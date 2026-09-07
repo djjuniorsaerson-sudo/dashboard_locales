@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 from app.api import deps
-from app.models.remote_action import RemoteAction, RemoteActionStatus
 from app.services.extractor_modules import ModulesExtractor
 from app.services.yummy_client import YummyIntegrationClient
+from app.services.remote_action_dispatch import dispatch_remote_action
 from app.models.user import User
 from app.models.yummy import YummyInstallation, YummySnapshot
 import requests
@@ -19,23 +19,48 @@ router = APIRouter()
 
 from pydantic import BaseModel
 from typing import Optional
+from uuid import UUID
 
-def get_integration_client():
-    from app.db.session import SessionLocal
-    from app.models.yummy import YummyInstallation
-    from app.services.yummy_client import YummyIntegrationClient
-    
-    db = SessionLocal()
+def get_kitchen_client(
+    installation_id: UUID = Query(...),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    if not current_user.is_active or not current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Usuario sin acceso a este local.")
+    install = db.query(YummyInstallation).filter(
+        YummyInstallation.id == installation_id,
+        YummyInstallation.organization_id == current_user.organization_id,
+    ).first()
+    if not install:
+        raise HTTPException(status_code=404, detail="Local no encontrado.")
+    if not install.integration_enabled or not installation_is_online(install):
+        raise HTTPException(status_code=503, detail="Yummy del local seleccionado no está disponible.")
+    return YummyIntegrationClient(install.base_url, install.api_key)
+
+
+def request_kitchen(client, method, path, payload=None):
     try:
-        install = db.query(YummyInstallation).order_by(
-            YummyInstallation.last_health_check.desc().nullslast(),
-            YummyInstallation.created_at.desc(),
-        ).first()
-        if install and installation_is_online(install):
-            return YummyIntegrationClient(install.base_url, install.api_key)
-        return None
-    finally:
-        db.close()
+        result = client.request(method, path, payload=payload)
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Yummy no respondió a tiempo. Actualizá el estado antes de repetir la acción.")
+    except requests.exceptions.HTTPError as exc:
+        status_code = getattr(exc.response, "status_code", 502)
+        detail = "Yummy rechazó la solicitud de cocina."
+        try:
+            body = exc.response.json()
+            if isinstance(body, dict):
+                detail = body.get("message") or body.get("detail") or detail
+        except (ValueError, AttributeError):
+            pass
+        raise HTTPException(status_code=status_code if status_code in (400, 404, 409, 422) else 502, detail=detail)
+    except requests.exceptions.RequestException:
+        raise HTTPException(status_code=502, detail="No se pudo conectar con Yummy del local seleccionado.")
+    except ValueError:
+        raise HTTPException(status_code=502, detail="Yummy devolvió una respuesta inválida.")
+    if not isinstance(result, dict) or result.get("ok") is False or (method != "GET" and result.get("ok") is not True):
+        raise HTTPException(status_code=502, detail="Yummy no confirmó la solicitud de cocina.")
+    return result
 
 class ProductData(BaseModel):
     name: str
@@ -218,42 +243,6 @@ def _extract_remote_payload(payload):
     return payload
 
 
-def _queue_installation_action(
-    db: Session,
-    install: YummyInstallation,
-    current_user: User,
-    action_type: str,
-    payload: dict,
-    message: str,
-    extra_response: Optional[dict] = None,
-    mark_offline: bool = False,
-):
-    action = RemoteAction(
-        installation_id=install.id,
-        created_by_user_id=current_user.id,
-        action_type=action_type,
-        status=RemoteActionStatus.PENDING,
-        payload=payload,
-        result_payload={"_retry_count": 0, "_queued": True},
-    )
-    db.add(action)
-    db.flush()
-    if mark_offline:
-        install.connection_status = "OFFLINE"
-        db.add(install)
-    db.commit()
-    db.refresh(action)
-    response = {
-        "id": str(action.id),
-        "status": "QUEUED",
-        "installation_id": str(install.id),
-        "queued": True,
-        "message": message,
-        "retry_count": 0,
-    }
-    if isinstance(extra_response, dict):
-        response.update(extra_response)
-    return JSONResponse(status_code=202, content=response)
 
 
 def _build_remote_cashbox_report(client: YummyIntegrationClient, days_limit: int = 10):
@@ -719,84 +708,16 @@ def update_product_stock(
     install = get_installation_for_user(db, current_user, installation_id, online_only=False)
     if not install:
         raise HTTPException(status_code=404, detail="Instalación no encontrada")
-
-    if installation_is_online(install):
-        client = YummyIntegrationClient(install.base_url, install.api_key)
-        try:
-            current_rows = client.execute_sql(
-                """
-                SELECT COALESCE(stock_quantity, 0)
-                FROM productos
-                WHERE id = ?
-                LIMIT 1
-                """,
-                [product_id],
-            )
-            rows = (current_rows or {}).get("rows", [])
-            if not rows:
-                raise HTTPException(status_code=404, detail="Producto no encontrado")
-
-            current_stock = float(rows[0][0] or 0)
-            diff = target_stock - current_stock
-            if abs(diff) < 0.0001:
-                return {"success": True, "new_stock": current_stock, "message": "Sin cambios"}
-
-            movement_type = "ingreso" if diff > 0 else "salida"
-            payload = client.request(
-                "POST",
-                "/api/integration/stock/movimientos",
-                payload={
-                    "product_id": product_id,
-                    "movement_type": movement_type,
-                    "quantity": abs(diff),
-                    "notes": "Ajuste rapido desde panel central",
-                },
-            )
-            return {
-                "success": True,
-                "previous_stock": current_stock,
-                "new_stock": target_stock,
-                "movement": payload.get("data") if isinstance(payload, dict) else payload,
-            }
-        except requests.RequestException:
-            return _queue_installation_action(
-                db,
-                install,
-                current_user,
-                "ADJUST_STOCK",
-                {
-                    "product_id": product_id,
-                    "target_stock": target_stock,
-                    "notes": "Ajuste rapido desde panel central",
-                },
-                "Ajuste de stock en cola. Se aplicará cuando el local vuelva a estar online.",
-                extra_response={
-                    "success": True,
-                    "previous_stock": None,
-                    "new_stock": target_stock,
-                    "product_id": product_id,
-                },
-                mark_offline=True,
-            )
-
-    return _queue_installation_action(
-        db,
-        install,
-        current_user,
-        "ADJUST_STOCK",
-        {
-            "product_id": product_id,
-            "target_stock": target_stock,
-            "notes": "Ajuste rapido desde panel central",
-        },
-        "Ajuste de stock en cola. Se aplicará cuando el local vuelva a estar online.",
-        extra_response={
-            "success": True,
-            "previous_stock": None,
-            "new_stock": target_stock,
-            "product_id": product_id,
-        },
+    result = dispatch_remote_action(
+        db, install, current_user, "ADJUST_STOCK",
+        {"product_id": product_id, "target_stock": target_stock, "notes": "Ajuste rapido desde panel central"},
+        "/api/integration/stock/movimientos", online=installation_is_online(install),
+        message="Ajuste de stock en cola. Se aplicará cuando el local vuelva a estar online.",
+        extra_response={"success": True, "previous_stock": None, "new_stock": target_stock, "product_id": product_id},
     )
+    if isinstance(result, JSONResponse):
+        return result
+    return {"success": True, **(result.get("data") or {}), "message": result.get("message")}
 
 @router.get("/clients")
 def get_clients(
@@ -1543,23 +1464,21 @@ def export_pedidos_xlsx(
     )
 
 @router.get("/cocina/config")
-def get_cocina_config():
-    try:
-        client = get_integration_client()
-        if not client: return {}
-        parsed = client.request("GET", "/api/comandero/config")
-        return parsed.get('data', {}) if isinstance(parsed, dict) and 'data' in parsed else parsed
-    except Exception:
-        return {}
+def get_cocina_config(client: YummyIntegrationClient = Depends(get_kitchen_client)):
+    parsed = request_kitchen(client, "GET", "/api/comandero/config")
+    config = parsed.get("data", parsed)
+    if not isinstance(config, dict):
+        raise HTTPException(status_code=502, detail="Yummy devolvió una configuración de cocina inválida.")
+    return config
 
 @router.put("/cocina/comandas/{order_id}/{kitchen_key}/state")
-def update_cocina_state(order_id: int, kitchen_key: str, data: dict):
-    try:
-        client = get_integration_client()
-        if not client: return {}
-        return client.request("PUT", f"/api/comandas/{order_id}/{kitchen_key}/state", payload=data)
-    except Exception:
-        return {}
+def update_cocina_state(
+    order_id: int,
+    kitchen_key: str,
+    data: dict,
+    client: YummyIntegrationClient = Depends(get_kitchen_client),
+):
+    return request_kitchen(client, "PUT", f"/api/comandas/{order_id}/{kitchen_key}/state", payload=data)
 
 from pydantic import BaseModel
 from typing import Optional
@@ -1660,33 +1579,11 @@ def add_caja_movimiento(
     install = get_installation_for_user(db, current_user, installation_id, online_only=False)
     if not install:
         raise HTTPException(status_code=404, detail="Instalación no encontrada")
-
-    request_payload = data.dict(exclude_none=True)
-    if installation_is_online(install):
-        client = YummyIntegrationClient(install.base_url, install.api_key)
-        try:
-            return client.request("POST", "/api/caja/movimientos", payload=request_payload)
-        except requests.RequestException:
-            return _queue_installation_action(
-                db,
-                install,
-                current_user,
-                "ADD_CASH_MOVEMENT",
-                request_payload,
-                "Movimiento de caja en cola. Se enviará cuando el local vuelva a estar online.",
-                extra_response={"success": True, "movement_type": request_payload.get("movement_type")},
-                mark_offline=True,
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    return _queue_installation_action(
-        db,
-        install,
-        current_user,
-        "ADD_CASH_MOVEMENT",
-        request_payload,
-        "Movimiento de caja en cola. Se enviará cuando el local vuelva a estar online.",
+    request_payload = data.model_dump(exclude_none=True)
+    return dispatch_remote_action(
+        db, install, current_user, "ADD_CASH_MOVEMENT", request_payload,
+        "/api/caja/movimientos", online=installation_is_online(install),
+        message="Movimiento de caja en cola. Se enviará cuando el local vuelva a estar online.",
         extra_response={"success": True, "movement_type": request_payload.get("movement_type")},
     )
 
