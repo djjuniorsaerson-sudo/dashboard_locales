@@ -195,6 +195,36 @@ export default function Repartidores() {
   };
 
   const normalizeSearch = (value) => String(value || '').toLowerCase().trim();
+  const getHistoryOrderId = (trip) => Number(trip.order_id || trip.pedido_id || trip.orderId || 0);
+  const getHistoryStatus = (trip) => String(trip.status || trip.estado || trip.movement_type || '').trim();
+  const getHistoryClient = (trip) => String(
+    trip.client_name || trip.customer_name || trip.cliente || trip.name || ''
+  ).trim() || 'Sin nombre';
+  const getHistoryAddress = (trip) => String(
+    trip.address || trip.customer_address || trip.destination_address || trip.delivery_address || trip.direccion || trip.destino || ''
+  ).trim() || '-';
+  const getHistoryDate = (trip) => String(
+    trip.created_at || trip.assigned_at || trip.marked_at || trip.order_created_at || ''
+  ).trim();
+  const formatHistoryDate = (trip) => {
+    const rawDate = getHistoryDate(trip);
+    if (!rawDate) {
+      return '-';
+    }
+    const parsed = new Date(rawDate);
+    if (Number.isNaN(parsed.getTime())) {
+      return rawDate;
+    }
+    return parsed.toLocaleString('es-AR', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+  const visibleHistory = globalHistory.filter((trip) => {
+    const status = normalizeSearch(getHistoryStatus(trip));
+    return !['devuelto', 'cancelado', 'rechazado', 'anulado'].includes(status);
+  });
+  const returnedHistory = globalHistory.filter((trip) => {
+    const status = normalizeSearch(getHistoryStatus(trip));
+    return ['devuelto', 'cancelado', 'rechazado', 'anulado'].includes(status);
+  });
   const changeByOrder = new Map();
   (globalHistory || []).forEach((row) => {
     const movementType = normalizeSearch(row.movement_type || row.status);
@@ -400,26 +430,26 @@ export default function Repartidores() {
                 <h3 className="font-bold text-white">Historial</h3>
             </div>
             <div className="p-4 overflow-y-auto flex-1 space-y-3 bg-gray-800">
-                {globalHistory.filter(t => !['devuelto', 'cancelado', 'rechazado', 'anulado'].includes(t.status?.trim().toLowerCase())).map(trip => (
-                    <div key={trip.id} className="bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-700 flex justify-between items-start hover:bg-gray-800 transition-colors">
+                {visibleHistory.map((trip, index) => (
+                    <div key={trip.id || `${getHistoryOrderId(trip)}-${index}`} className="bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-700 flex justify-between items-start hover:bg-gray-800 transition-colors">
                         <div>
                             <div className="flex items-center gap-2 mb-2">
-                                <div className="font-bold text-white text-sm">Pedido #{trip.pedido_id || trip.id}</div>
+                                <div className="font-bold text-white text-sm">Pedido #{getHistoryOrderId(trip) || trip.id || '-'}</div>
                                 <div className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-bold px-2 py-0.5 rounded uppercase">
-                                    {trip.status || 'SIN ESTADO'}
+                                    {getHistoryStatus(trip) || 'SIN ESTADO'}
                                 </div>
                             </div>
-                            <div className="text-xs text-gray-400 mb-1">Cliente: <span className="font-medium text-gray-300">{trip.client_name || 'Sin nombre'}</span></div>
-                            <div className="text-xs text-gray-400 mb-1">Direccion: <span className="font-medium text-gray-300">{trip.address || '-'}</span></div>
-                            <div className="text-xs text-gray-400 mb-1">Total: <span className="font-bold text-emerald-400">${trip.total_amount.toLocaleString()}</span></div>
-                            <div className="text-xs text-gray-500 mt-2">Fecha: {trip.created_at ? new Date(trip.created_at).toLocaleString('es-AR', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'}) : '-'}</div>
+                            <div className="text-xs text-gray-400 mb-1">Cliente: <span className="font-medium text-gray-300">{getHistoryClient(trip)}</span></div>
+                            <div className="text-xs text-gray-400 mb-1">Direccion: <span className="font-medium text-gray-300">{getHistoryAddress(trip)}</span></div>
+                            <div className="text-xs text-gray-400 mb-1">Total: <span className="font-bold text-emerald-400">${Number(trip.total_amount || trip.total || 0).toLocaleString()}</span></div>
+                            <div className="text-xs text-gray-500 mt-2">Fecha: {formatHistoryDate(trip)}</div>
                         </div>
                         <div className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-[10px] font-bold px-2 py-1 rounded-full uppercase">
-                            {trip.repartidor_name}
+                            {trip.repartidor_name || trip.driver_name || '-'}
                         </div>
                     </div>
                 ))}
-                {globalHistory.filter(t => !['devuelto', 'cancelado', 'rechazado', 'anulado'].includes(t.status?.trim().toLowerCase())).length === 0 && (
+                {visibleHistory.length === 0 && (
                     <p className="text-center text-gray-500 py-10 text-sm">No hay historial reciente.</p>
                 )}
             </div>
@@ -431,25 +461,25 @@ export default function Repartidores() {
                 <h3 className="font-bold text-white">Pedidos devueltos</h3>
             </div>
             <div className="p-4 overflow-y-auto flex-1 space-y-3 bg-gray-800">
-                {globalHistory.filter(t => ['devuelto', 'cancelado', 'rechazado', 'anulado'].includes(t.status?.trim().toLowerCase())).map(trip => (
-                    <div key={trip.id} className="bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-700 flex justify-between items-start hover:bg-gray-800 transition-colors">
+                {returnedHistory.map((trip, index) => (
+                    <div key={trip.id || `${getHistoryOrderId(trip)}-${index}`} className="bg-gray-900 p-4 rounded-xl shadow-sm border border-gray-700 flex justify-between items-start hover:bg-gray-800 transition-colors">
                         <div className="w-full">
                             <div className="flex justify-between items-center mb-2">
-                                <div className="font-bold text-white text-sm">Pedido #{trip.pedido_id || trip.id}</div>
+                                <div className="font-bold text-white text-sm">Pedido #{getHistoryOrderId(trip) || trip.id || '-'}</div>
                                 <div className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-bold px-2 py-1 rounded-full uppercase">
                                     Devuelto
                                 </div>
                             </div>
                             <div className="text-xs text-gray-400 mb-1">De: <span className="font-medium text-gray-300">{trip.from_repartidor_name || 'SISTEMA'}</span></div>
                             <div className="text-xs text-gray-400 mb-1">A: <span className="font-medium text-yellow-400 uppercase">{trip.repartidor_name}</span></div>
-                            <div className="text-xs text-gray-400 mb-1">Cliente: <span className="font-medium text-gray-300">{trip.client_name || 'Sin nombre'}</span></div>
-                            <div className="text-xs text-gray-400 mb-1">Direccion: <span className="font-medium text-gray-300">{trip.address || '-'}</span></div>
-                            <div className="text-xs text-gray-400 mb-1">Total: <span className="font-bold text-emerald-400">${trip.total_amount.toLocaleString()}</span></div>
+                            <div className="text-xs text-gray-400 mb-1">Cliente: <span className="font-medium text-gray-300">{getHistoryClient(trip)}</span></div>
+                            <div className="text-xs text-gray-400 mb-1">Direccion: <span className="font-medium text-gray-300">{getHistoryAddress(trip)}</span></div>
+                            <div className="text-xs text-gray-400 mb-1">Total: <span className="font-bold text-emerald-400">${Number(trip.total_amount || trip.total || 0).toLocaleString()}</span></div>
                             <div className="text-xs text-gray-500 mt-2">Motivo: <span className="italic text-gray-400">{trip.notes || 'Sin motivo'}</span></div>
                         </div>
                     </div>
                 ))}
-                {globalHistory.filter(t => ['devuelto', 'cancelado', 'rechazado', 'anulado'].includes(t.status?.trim().toLowerCase())).length === 0 && (
+                {returnedHistory.length === 0 && (
                     <p className="text-center text-gray-500 py-10 text-sm">No hay pedidos devueltos.</p>
                 )}
             </div>

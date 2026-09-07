@@ -1185,13 +1185,59 @@ def get_global_repartidor_history(
         rows = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
         if not isinstance(rows, list):
             raise RuntimeError("Remote repartidores history unavailable")
+        rows = normalize_repartidor_history_rows(rows)
         current_payload = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
         current_payload["history"] = rows
         save_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY, current_payload)
         return rows
     except Exception:
         snapshot = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
-        return snapshot.get("history", [])
+        return normalize_repartidor_history_rows(snapshot.get("history", []))
+
+
+def normalize_repartidor_history_rows(rows):
+    normalized = []
+    for index, row in enumerate(rows if isinstance(rows, list) else []):
+        if not isinstance(row, dict):
+            continue
+        order_id = safe_int(row.get("order_id") or row.get("pedido_id"))
+        movement_type = str(row.get("movement_type") or row.get("status") or "").strip()
+        status = str(row.get("status") or "").strip() or (movement_type if movement_type != "pedido" else "pedido")
+        created_at = str(
+            row.get("created_at")
+            or row.get("assigned_at")
+            or row.get("marked_at")
+            or row.get("order_created_at")
+            or ""
+        ).strip()
+        normalized.append(
+            {
+                **row,
+                "id": row.get("id") or row.get("trip_id") or order_id or f"hist-{index}",
+                "order_id": order_id,
+                "pedido_id": order_id,
+                "client_name": str(
+                    row.get("client_name")
+                    or row.get("customer_name")
+                    or row.get("cliente")
+                    or row.get("name")
+                    or ""
+                ).strip(),
+                "address": str(
+                    row.get("address")
+                    or row.get("customer_address")
+                    or row.get("destination_address")
+                    or row.get("delivery_address")
+                    or row.get("direccion")
+                    or row.get("destino")
+                    or ""
+                ).strip(),
+                "status": status,
+                "created_at": created_at,
+                "total_amount": safe_float(row.get("total_amount") or row.get("total") or row.get("amount")),
+            }
+        )
+    return normalized
 
 
 def merge_repartidores_delivered(delivered_payload, history_payload):
