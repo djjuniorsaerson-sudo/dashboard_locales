@@ -375,7 +375,7 @@ export default function Repartidores() {
                     <th className="px-6 py-4">Repartidor</th>
                     <th className="px-6 py-4">Turno</th>
                     <th className="px-6 py-4">Estado</th>
-                    <th className="px-6 py-4 text-center">Viajes Pendientes</th>
+                    <th className="px-6 py-4 text-center">Viajes Realizados</th>
                     <th className="px-6 py-4 text-right">Efectivo a Rendir</th>
                     <th className="px-6 py-4 text-right">Acciones</th>
                   </tr>
