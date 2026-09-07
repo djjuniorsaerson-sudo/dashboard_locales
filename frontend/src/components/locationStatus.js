@@ -1,7 +1,17 @@
+export function parsePanelDate(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
+    ? raw
+    : `${raw.replace(' ', 'T')}Z`;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function formatRelativeDate(value) {
-  if (!value) return 'Nunca';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'Nunca';
+  const parsed = parsePanelDate(value);
+  if (!parsed) return 'Nunca';
   const diffMs = Date.now() - parsed.getTime();
   const diffSeconds = Math.max(0, Math.round(diffMs / 1000));
   if (diffSeconds < 10) return 'recién';
@@ -16,9 +26,8 @@ export function formatRelativeDate(value) {
 }
 
 export function formatExactDate(value) {
-  if (!value) return 'Nunca';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'Nunca';
+  const parsed = parsePanelDate(value);
+  if (!parsed) return 'Nunca';
   return parsed.toLocaleString();
 }
 

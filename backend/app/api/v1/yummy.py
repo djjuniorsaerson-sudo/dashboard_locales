@@ -15,7 +15,7 @@ from app.models.catalog import SyncedCategory, SyncedProduct
 from app.models.connection_request import ConnectionRequest, ConnectionStatus
 from app.models.remote_action import RemoteAction, RemoteActionStatus
 from app.models.user import User
-from app.models.yummy import YummyInstallation, YummySnapshot
+from app.models.yummy import YummyConnectorEvent, YummyInstallation, YummySnapshot
 from app.services.yummy_client import YummyIntegrationClient
 
 router = APIRouter()
@@ -60,6 +60,21 @@ class HeartbeatPayload(BaseModel):
     local_last_error: Optional[str] = None
     local_outbox_pending: int = 0
     local_inbox_pending: int = 0
+
+
+class ConnectorEventPayload(BaseModel):
+    id: int
+    event_uuid: str
+    module_name: str
+    action_name: str
+    entity_type: str
+    entity_id: str = ""
+    payload: Optional[dict] = None
+    created_at: Optional[str] = ""
+
+
+class ConnectorEventsPayload(BaseModel):
+    events: List[ConnectorEventPayload] = Field(default_factory=list)
 
 
 class CatalogCategoryPayload(BaseModel):
@@ -558,6 +573,36 @@ def connector_heartbeat(
     db.add(installation)
     db.commit()
     return {"status": "ok", "server_time": datetime.utcnow(), "requeued_actions": requeued}
+
+
+@router.post("/connector/installations/{installation_id}/events")
+def connector_events(
+    payload: ConnectorEventsPayload,
+    installation: YummyInstallation = Depends(deps.get_connector_installation),
+) -> Any:
+    db = object_session(installation)
+    accepted_event_ids = []
+    for event in payload.events:
+        event_uuid = str(event.event_uuid or "").strip()
+        if not event_uuid:
+            continue
+        existing = db.query(YummyConnectorEvent).filter(
+            YummyConnectorEvent.event_uuid == event_uuid,
+        ).first()
+        if not existing:
+            db.add(YummyConnectorEvent(
+                installation_id=installation.id,
+                event_uuid=event_uuid,
+                module_name=event.module_name,
+                action_name=event.action_name,
+                entity_type=event.entity_type,
+                entity_id=event.entity_id,
+                payload=event.payload,
+                local_created_at=event.created_at or "",
+            ))
+        accepted_event_ids.append(event.id)
+    db.commit()
+    return {"status": "ok", "accepted_event_ids": accepted_event_ids}
 
 
 @router.post("/connector/installations/{installation_id}/catalog-sync")
