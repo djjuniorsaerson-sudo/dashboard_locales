@@ -55,6 +55,11 @@ class HeartbeatPayload(BaseModel):
     tailscale_ip: Optional[str] = None
     status: Optional[str] = "ONLINE"
     capabilities: List[str] = Field(default_factory=list)
+    local_last_sync_at: Optional[str] = None
+    local_last_status: Optional[str] = None
+    local_last_error: Optional[str] = None
+    local_outbox_pending: int = 0
+    local_inbox_pending: int = 0
 
 
 class CatalogCategoryPayload(BaseModel):
@@ -157,6 +162,14 @@ def serialize_installation(install: YummyInstallation) -> dict[str, Any]:
             RemoteAction.status == RemoteActionStatus.FAILED,
         ).order_by(RemoteAction.updated_at.desc(), RemoteAction.created_at.desc()).first()
 
+    heartbeat = install.heartbeat_payload if isinstance(install.heartbeat_payload, dict) else {}
+
+    def heartbeat_count(key: str) -> int:
+        try:
+            return max(0, int(heartbeat.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
     return {
         "id": str(install.id),
         "local_id": install.local_id,
@@ -172,6 +185,11 @@ def serialize_installation(install: YummyInstallation) -> dict[str, Any]:
         "pending_actions_summary": pending_actions_summary,
         "last_error_message": latest_failed_action.error_message if latest_failed_action else None,
         "last_error_at": latest_failed_action.updated_at if latest_failed_action else None,
+        "local_last_sync_at": str(heartbeat.get("local_last_sync_at") or "").strip() or None,
+        "local_last_status": str(heartbeat.get("local_last_status") or "").strip() or None,
+        "local_last_error": str(heartbeat.get("local_last_error") or "").strip() or None,
+        "local_outbox_pending": heartbeat_count("local_outbox_pending"),
+        "local_inbox_pending": heartbeat_count("local_inbox_pending"),
         "created_at": install.created_at,
     }
 

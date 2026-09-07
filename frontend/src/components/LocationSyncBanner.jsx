@@ -14,6 +14,9 @@ export default function LocationSyncBanner({
   const pendingActionsCount = Number(location.pendingActionsCount || 0);
   const pendingActionsSummary = location.pendingActionsSummary || {};
   const lastErrorMessage = String(location.lastErrorMessage || '').trim();
+  const localOutboxPending = Number(location.localOutboxPending || 0);
+  const localInboxPending = Number(location.localInboxPending || 0);
+  const localLastError = String(location.localLastError || '').trim();
   const isOffline = String(location.status || '').toUpperCase() !== 'ONLINE';
 
   return (
@@ -33,6 +36,9 @@ export default function LocationSyncBanner({
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/70">
             <span className="rounded-full bg-black/20 px-3 py-1">Panel actualizado: {formatRelativeDate(location.lastSyncAt)}</span>
             <span className="rounded-full bg-black/20 px-3 py-1">Último contacto con Yummy: {formatRelativeDate(location.lastHealthCheck)}</span>
+            <span className={`rounded-full px-3 py-1 ${localOutboxPending + localInboxPending > 0 ? 'bg-amber-950/40 text-amber-100' : 'bg-black/20'}`}>
+              Cola local: {localOutboxPending + localInboxPending}
+            </span>
             {location.lastSeenIp && <span className="rounded-full bg-black/20 px-3 py-1">IP: {location.lastSeenIp}</span>}
           </div>
         </div>
@@ -57,6 +63,11 @@ export default function LocationSyncBanner({
         <div className="mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/80">
           <span className="font-semibold">Último error:</span> {lastErrorMessage}
           {location.lastErrorAt ? ` · ${formatExactDate(location.lastErrorAt)}` : ''}
+        </div>
+      )}
+      {localLastError && (
+        <div className="mt-3 rounded-xl border border-amber-200/20 bg-amber-950/25 px-3 py-2 text-xs text-amber-50">
+          <span className="font-semibold">Último error de Yummy:</span> {localLastError}
         </div>
       )}
     </div>

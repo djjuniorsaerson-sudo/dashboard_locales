@@ -32,6 +32,11 @@ export const AuthProvider = ({ children }) => {
           pendingActionsSummary: inst.pending_actions_summary || {},
           lastErrorMessage: inst.last_error_message || '',
           lastErrorAt: inst.last_error_at,
+          localLastSyncAt: inst.local_last_sync_at || '',
+          localLastStatus: inst.local_last_status || '',
+          localLastError: inst.local_last_error || '',
+          localOutboxPending: Number(inst.local_outbox_pending || 0),
+          localInboxPending: Number(inst.local_inbox_pending || 0),
           createdAt: inst.created_at,
         }));
         setLocations(mapped);

@@ -301,6 +301,16 @@ function MainLayout() {
                       {pendingActionsCount}
                     </span>
                   </div>
+                  <div className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-gray-400">Cola local de Yummy</span>
+                    <span className={`text-right font-medium ${Number(currentLocation?.localOutboxPending || 0) + Number(currentLocation?.localInboxPending || 0) > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
+                      {Number(currentLocation?.localOutboxPending || 0) + Number(currentLocation?.localInboxPending || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-gray-400">Última sync de Yummy</span>
+                    <span className="text-right text-gray-200">{formatExactDate(currentLocation?.localLastSyncAt)}</span>
+                  </div>
                   {Object.keys(pendingActionsSummary).length > 0 && (
                     <div className="rounded-xl bg-white/[0.03] px-3 py-2">
                       <span className="block text-gray-400">Pendientes por tipo</span>
@@ -328,6 +338,12 @@ function MainLayout() {
                       </span>
                     )}
                   </div>
+                  {currentLocation?.localLastError && (
+                    <div className="rounded-xl bg-amber-950/25 px-3 py-2">
+                      <span className="block text-amber-200">Último error de Yummy</span>
+                      <span className="mt-1 block text-sm text-amber-50">{currentLocation.localLastError}</span>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
                     <button
                       type="button"
