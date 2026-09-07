@@ -1216,22 +1216,8 @@ def normalize_repartidor_history_rows(rows):
     return normalized
 
 
-def merge_repartidores_delivered(delivered_payload, history_payload):
+def merge_repartidores_delivered(delivered_payload):
     delivered_rows = delivered_payload if isinstance(delivered_payload, list) else []
-    history_rows = history_payload if isinstance(history_payload, list) else []
-    change_by_order = {}
-    for row in history_rows:
-        if not isinstance(row, dict):
-            continue
-        movement_type = str(row.get("movement_type") or row.get("status") or "").strip().lower()
-        if movement_type != "vuelto":
-            continue
-        match = re.search(r"pedido\s*#?\s*(\d+)", str(row.get("notes") or ""), re.IGNORECASE)
-        if not match:
-            continue
-        order_id = safe_int(match.group(1))
-        if order_id > 0:
-            change_by_order[order_id] = round(change_by_order.get(order_id, 0) + safe_float(row.get("total_amount") or row.get("amount")), 2)
     rows_by_order = {}
     for row in delivered_rows:
         if not isinstance(row, dict):
@@ -1241,42 +1227,9 @@ def merge_repartidores_delivered(delivered_payload, history_payload):
             rows_by_order[order_id] = {
                 **row,
                 "order_id": order_id,
-                "change_amount": safe_float(row.get("change_amount")) or change_by_order.get(order_id, 0),
+                "change_amount": safe_float(row.get("change_amount")),
                 "source": row.get("source") or "exit",
             }
-    ignored_movement_types = {"vuelto", "retiro", "transfer_out", "transfer_in", "devolucion", "devuelto"}
-    for row in history_rows:
-        if not isinstance(row, dict):
-            continue
-        order_id = safe_int(row.get("order_id") or row.get("pedido_id"))
-        if order_id <= 0 or order_id in rows_by_order:
-            continue
-        movement_type = str(row.get("movement_type") or row.get("status") or "").strip().lower()
-        if movement_type in ignored_movement_types:
-            continue
-        rows_by_order[order_id] = {
-            "order_id": order_id,
-            "driver_name": str(row.get("repartidor_name") or row.get("driver_name") or "").strip(),
-            "cashier_name": str(
-                row.get("cashier_name")
-                or row.get("created_by_username")
-                or row.get("created_by")
-                or row.get("cashier")
-                or ""
-            ).strip(),
-            "customer_address": str(
-                row.get("customer_address")
-                or row.get("address")
-                or row.get("destination_address")
-                or row.get("delivery_address")
-                or row.get("destino")
-                or ""
-            ).strip(),
-            "total_amount": safe_float(row.get("total_amount")),
-            "change_amount": safe_float(row.get("change_amount")) or change_by_order.get(order_id, 0),
-            "marked_at": str(row.get("assigned_at") or row.get("created_at") or row.get("order_created_at") or "").strip(),
-            "source": "history",
-        }
     return sorted(
         rows_by_order.values(),
         key=lambda row: (str(row.get("marked_at") or ""), safe_int(row.get("order_id"))),
@@ -1296,13 +1249,10 @@ def get_repartidores_delivered(
     try:
         client = YummyIntegrationClient(install.base_url, install.api_key)
         delivered_payload = client.request("GET", "/api/integration/repartidores/delivered")
-        history_payload = client.request("GET", "/api/integration/repartidores/history")
         delivered_rows = delivered_payload.get("data") if isinstance(delivered_payload, dict) and "data" in delivered_payload else delivered_payload
-        history_rows = history_payload.get("data") if isinstance(history_payload, dict) and "data" in history_payload else history_payload
-        rows = merge_repartidores_delivered(delivered_rows, history_rows)
+        rows = merge_repartidores_delivered(delivered_rows)
         current_payload = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
         current_payload["delivered"] = rows
-        current_payload["history"] = history_rows if isinstance(history_rows, list) else current_payload.get("history", [])
         save_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY, current_payload)
         return rows
     except Exception:
@@ -1310,7 +1260,7 @@ def get_repartidores_delivered(
         delivered_rows = snapshot.get("delivered", [])
         if delivered_rows:
             return delivered_rows
-        return merge_repartidores_delivered([], snapshot.get("history", []))
+        return []
 
 
 @router.get("/repartidores/export/xlsx")
