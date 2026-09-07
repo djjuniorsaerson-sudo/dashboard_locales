@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 import { useModal } from '../context/ModalContext';
+import { createEmployeeRefresh, EMPLOYEE_POLL_INTERVAL_MS } from './employeeRefresh';
 
 const readCachedData = (key) => {
   if (!key) return null;
@@ -18,58 +19,6 @@ const writeCachedData = (key, patch) => {
   sessionStorage.setItem(key, JSON.stringify({ ...current, ...patch }));
 };
 
-const novedadKey = (item) => String(item?.id || '');
-
-const novedadSignature = (item) => [
-  item?.employee_id || '',
-  String(item?.event_type || '').toLowerCase(),
-  Number(item?.amount || 0),
-  String(item?.notes || '').trim().toLowerCase(),
-  String(item?.event_date || '').slice(0, 10),
-].join('|');
-
-const novedadTimestamp = (item) => {
-  const rawDate = String(item?.sort_at || item?.event_date || item?._localDate || '');
-  const normalizedDate = rawDate.includes('T') ? rawDate : rawDate.replace(' ', 'T');
-  const parsedDate = Date.parse(normalizedDate);
-  if (!Number.isNaN(parsedDate)) return parsedDate;
-  return Number(item?._localCreatedAt || 0);
-};
-
-const novedadSortOrder = (item) => {
-  const value = Number(item?.sort_order || 0);
-  if (value > 0) return value;
-  return 0;
-};
-
-const sortNovedades = (items = []) => [...items].sort((a, b) => {
-  const orderDiff = novedadSortOrder(b) - novedadSortOrder(a);
-  if (orderDiff !== 0) return orderDiff;
-  const dateDiff = novedadTimestamp(b) - novedadTimestamp(a);
-  if (dateDiff !== 0) return dateDiff;
-  return String(b?.id || '').localeCompare(String(a?.id || ''), undefined, { numeric: true });
-});
-
-const mergeNovedades = (current = [], incoming = []) => {
-  const merged = new Map();
-  const signatures = new Set();
-
-  incoming.forEach((item) => {
-    const key = novedadKey(item) || novedadSignature(item);
-    merged.set(key, item);
-    signatures.add(novedadSignature(item));
-  });
-
-  current.forEach((item) => {
-    if (!item?._pendingLocal) return;
-    const isRecent = Date.now() - Number(item._localCreatedAt || 0) < 5 * 60 * 1000;
-    if (!isRecent || signatures.has(novedadSignature(item))) return;
-    const key = novedadKey(item) || novedadSignature(item);
-    if (!merged.has(key)) merged.set(key, item);
-  });
-
-  return sortNovedades(Array.from(merged.values()));
-};
 
 const formatNovedadDate = (value) => {
   if (!value) {
@@ -129,10 +78,11 @@ const formatNovedadDate = (value) => {
 export default function Empleados() {
   const { token, currentLocation } = useAuth();
   const { showAlert, showConfirm } = useModal();
-  const [employees, setEmployees] = useState([]);
+  const [{ employees, novedades }, setEmployeeData] = useState({ employees: [], novedades: [] });
   const [loadingEmployees, setLoadingEmployees] = useState(true);
-  const [loadingNovedades, setLoadingNovedades] = useState(true);
-  const [novedades, setNovedades] = useState([]);
+  const loadingNovedades = loadingEmployees;
+  const [refreshMessage, setRefreshMessage] = useState('');
+  const employeeSync = useRef(null);
   const [novedadesPage, setNovedadesPage] = useState(1);
   const NOVEDADES_PER_PAGE = 10;
   const cacheKey = currentLocation?.id ? `panel:empleados:${currentLocation.id}` : null;
@@ -156,67 +106,63 @@ export default function Empleados() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchEmployees = async (background = false) => {
-    try {
-      if (!background) setLoadingEmployees(true);
-      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
-      const res = await fetch(`/api/v1/data/employees${installationQuery}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setEmployees(data);
-        writeCachedData(cacheKey, { employees: data });
-      }
-    } catch (e) {
-      console.error("Error fetching employees", e);
-    } finally {
-      setLoadingEmployees(false);
-    }
-  };
-
-  const fetchNovedades = async (background = false) => {
-    try {
-      if (!background) setLoadingNovedades(true);
-      const installationQuery = currentLocation?.id ? `?installation_id=${encodeURIComponent(currentLocation.id)}` : '';
-      const res = await fetch(`/api/v1/data/employees/novedades${installationQuery}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNovedades((current) => {
-          const merged = mergeNovedades(current, data);
-          writeCachedData(cacheKey, { novedades: merged });
-          return merged;
-        });
-      }
-    } catch (e) {
-      console.error("Error fetching novedades", e);
-    } finally {
-      setLoadingNovedades(false);
-    }
-  };
-
   useEffect(() => {
     const cached = readCachedData(cacheKey);
-    if (Array.isArray(cached?.employees)) {
-      setEmployees(cached.employees);
-      setLoadingEmployees(false);
-    }
-    if (Array.isArray(cached?.novedades)) {
-      setNovedades(cached.novedades);
-      setLoadingNovedades(false);
-    }
+    const hasCache = Array.isArray(cached?.employees) && Array.isArray(cached?.novedades);
+    setEmployeeData(hasCache ? { employees: cached.employees, novedades: cached.novedades } : { employees: [], novedades: [] });
+    setLoadingEmployees(Boolean(currentLocation?.id) && !hasCache);
+    setRefreshMessage('');
+    setNovedadesPage(1);
+    setIsSaving(false);
+    setIsModalOpen(false);
+    setIsEditModalOpen(false);
+    if (!currentLocation?.id) return;
 
-    fetchEmployees(Boolean(cached?.employees));
-    fetchNovedades(Boolean(cached?.novedades));
-    return subscribePanelSync((detail) => {
-      if (detail?.modules && !detail.modules.some((module) => ['employees', 'cash'].includes(module))) {
-        return;
-      }
-      fetchEmployees(true);
-      fetchNovedades(true);
+    const sync = createEmployeeRefresh({
+      load: async (signal) => {
+        const res = await fetch(`/api/v1/data/employees/summary?installation_id=${encodeURIComponent(currentLocation.id)}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal,
+          cache: 'no-store',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'No se pudieron actualizar los empleados.');
+        if (!Array.isArray(data.employees) || !Array.isArray(data.novedades)) throw new Error('La respuesta de empleados está incompleta.');
+        return data;
+      },
+      apply: (data) => {
+        const paired = { employees: data.employees, novedades: data.novedades };
+        setEmployeeData(paired);
+        writeCachedData(cacheKey, paired);
+        setLoadingEmployees(false);
+        setRefreshMessage(data.source === 'snapshot' ? 'Yummy no respondió. Se muestran los últimos datos guardados.' : '');
+        setNovedadesPage((page) => Math.min(page, Math.max(1, Math.ceil(data.novedades.length / NOVEDADES_PER_PAGE))));
+      },
+      onError: (error) => {
+        setLoadingEmployees(false);
+        setRefreshMessage(error.message || 'No se pudieron actualizar los empleados y su historial.');
+      },
     });
+    employeeSync.current = sync;
+    sync.refresh();
+    const refreshVisible = () => {
+      if (document.visibilityState === 'visible') sync.refresh();
+    };
+    const interval = setInterval(refreshVisible, EMPLOYEE_POLL_INTERVAL_MS);
+    window.addEventListener('focus', refreshVisible);
+    document.addEventListener('visibilitychange', refreshVisible);
+    const unsubscribe = subscribePanelSync((detail) => {
+      if (detail?.modules && !detail.modules.some((module) => ['employees', 'cash'].includes(module))) return;
+      sync.refresh();
+    });
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', refreshVisible);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      unsubscribe();
+      sync.dispose();
+      if (employeeSync.current === sync) employeeSync.current = null;
+    };
   }, [token, currentLocation?.id]);
 
   const handleOpenModal = (employee, type) => {
@@ -250,12 +196,20 @@ export default function Empleados() {
     setIsEditModalOpen(false);
   };
 
+  const finishEmployeeMutation = async (sync) => {
+    sync?.resume();
+    await sync?.refresh();
+    if (employeeSync.current === sync) setIsSaving(false);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedEmployee?.id || !currentLocation?.id) {
       showAlert({ title: 'Faltan datos', message: 'No hay un empleado o local activo seleccionado.', tone: 'warning' });
       return;
     }
+    const sync = employeeSync.current;
+    sync?.pause();
     setIsSaving(true);
     const parsedAmount = Number(formData.amount || 0);
     
@@ -273,48 +227,10 @@ export default function Empleados() {
         })
       });
       
+      if (employeeSync.current !== sync) return;
       if (res.ok) {
-        const savedNovedad = await res.json().catch(() => ({}));
-        const amount = parsedAmount;
-        const eventType = String(modalType || '').trim().toLowerCase();
-
-        if (savedNovedad?.id) {
-          const localNovedad = {
-            ...savedNovedad,
-            employee_id: savedNovedad.employee_id || selectedEmployee.id,
-            employee_name: savedNovedad.employee_name || selectedEmployee.name,
-            event_type: savedNovedad.event_type || modalType,
-            amount: Number(savedNovedad.amount || amount),
-            notes: savedNovedad.notes || formData.notes,
-            event_date: savedNovedad.event_date || new Date().toISOString(),
-            sort_at: savedNovedad.sort_at || new Date().toISOString(),
-            sort_order: Number(savedNovedad.sort_order || Date.now()),
-            _pendingLocal: true,
-            _localCreatedAt: Date.now(),
-          };
-          setNovedades((current) => {
-            const merged = mergeNovedades([localNovedad, ...current], []);
-            writeCachedData(cacheKey, { novedades: merged });
-            return merged;
-          });
-          setNovedadesPage(1);
-        }
-
-        if (eventType === 'adelanto' || eventType === 'falta') {
-          setEmployees((current) => current.map((employee) => {
-            if (employee.id !== selectedEmployee.id) return employee;
-            const currentAdelantos = Number(employee.adelantos || 0);
-            const currentFinalSalary = Number(employee.final_salary || 0);
-            return {
-              ...employee,
-              adelantos: currentAdelantos + amount,
-              final_salary: currentFinalSalary - amount,
-            };
-          }));
-        }
-
         closeModal();
-        Promise.allSettled([fetchEmployees(true), fetchNovedades(true)]);
+        setNovedadesPage(1);
         dispatchPanelSync({ modules: ['employees', 'cash'] });
       } else {
         const error = await res.json().catch(() => ({}));
@@ -324,7 +240,7 @@ export default function Empleados() {
       console.error("Error saving:", error);
       showAlert({ title: 'Error de conexión', message: 'Error de conexión', tone: 'danger' });
     } finally {
-      setIsSaving(false);
+      await finishEmployeeMutation(sync);
     }
   };
 
@@ -334,6 +250,8 @@ export default function Empleados() {
       showAlert({ title: 'Falta local activo', message: 'No hay un local activo seleccionado.', tone: 'warning' });
       return;
     }
+    const sync = employeeSync.current;
+    sync?.pause();
     setIsSaving(true);
     try {
       const res = await fetch(`/api/v1/data/employees/${editingEmployee.id}?installation_id=${encodeURIComponent(currentLocation.id)}`, {
@@ -352,15 +270,14 @@ export default function Empleados() {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.detail || 'No se pudo actualizar el empleado');
       }
-      await fetchEmployees();
-      await fetchNovedades();
+      if (employeeSync.current !== sync) return;
       closeEditModal();
       dispatchPanelSync({ modules: ['employees'] });
     } catch (error) {
       console.error("Error updating employee", error);
       showAlert({ title: 'No se pudo actualizar', message: error.message || "No se pudo actualizar el empleado", tone: 'danger' });
     } finally {
-      setIsSaving(false);
+      await finishEmployeeMutation(sync);
     }
   };
 
@@ -378,6 +295,8 @@ export default function Empleados() {
     if (!confirmed) {
       return;
     }
+    const sync = employeeSync.current;
+    sync?.pause();
     setIsSaving(true);
     try {
       const res = await fetch(`/api/v1/data/employees/${employee.id}/reset?installation_id=${encodeURIComponent(currentLocation.id)}`, {
@@ -390,14 +309,13 @@ export default function Empleados() {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.detail || 'No se pudo reiniciar el empleado');
       }
-      await fetchEmployees();
-      await fetchNovedades();
+      if (employeeSync.current !== sync) return;
       dispatchPanelSync({ modules: ['employees'] });
     } catch (error) {
       console.error("Error resetting employee", error);
       showAlert({ title: 'No se pudo reiniciar', message: error.message || "No se pudo reiniciar el empleado", tone: 'danger' });
     } finally {
-      setIsSaving(false);
+      await finishEmployeeMutation(sync);
     }
   };
 
@@ -415,6 +333,8 @@ export default function Empleados() {
     if (!confirmed) {
       return;
     }
+    const sync = employeeSync.current;
+    sync?.pause();
     setIsSaving(true);
     try {
       const res = await fetch(`/api/v1/data/employees/novedades/${nov.id}?installation_id=${encodeURIComponent(currentLocation.id)}`, {
@@ -427,19 +347,13 @@ export default function Empleados() {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.detail || 'No se pudo eliminar la novedad');
       }
-      setNovedades((current) => {
-        const next = current.filter((item) => String(item.id) !== String(nov.id));
-        writeCachedData(cacheKey, { novedades: next });
-        return next;
-      });
-      await fetchEmployees();
-      await fetchNovedades();
+      if (employeeSync.current !== sync) return;
       dispatchPanelSync({ modules: ['employees', 'cash'] });
     } catch (error) {
       console.error("Error deleting novedad", error);
       showAlert({ title: 'No se pudo eliminar', message: error.message || "No se pudo eliminar la novedad", tone: 'danger' });
     } finally {
-      setIsSaving(false);
+      await finishEmployeeMutation(sync);
     }
   };
 
@@ -454,6 +368,11 @@ export default function Empleados() {
 
   return (
     <div className="space-y-6">
+      {refreshMessage && (
+        <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+          {refreshMessage}
+        </div>
+      )}
       <div className="mb-6">
         <div>
           <h2 className="text-2xl font-bold text-white">Nómina de Empleados</h2>

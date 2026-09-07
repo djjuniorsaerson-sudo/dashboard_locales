@@ -834,6 +834,48 @@ def get_employees(
     snapshot = load_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY) or {}
     return snapshot.get("employees", [])
 
+
+def employees_have_movements(employees):
+    return isinstance(employees, list) and all(
+        isinstance(employee, dict)
+        and isinstance(employee.get("events"), list)
+        and isinstance(employee.get("payments"), list)
+        for employee in employees
+    )
+
+
+@router.get("/employees/summary")
+def get_employee_summary(
+    installation_id: UUID = Query(...),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        raise HTTPException(status_code=404, detail="Local no encontrado.")
+    try:
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        employees = _extract_remote_payload(client.request("GET", "/api/integration/employees"))
+        if not employees_have_movements(employees) or employees_payload_has_error(employees):
+            raise ValueError("Resumen de empleados incompleto")
+    except (requests.RequestException, ValueError, TypeError):
+        snapshot = load_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY) or {}
+        employees = snapshot.get("employees")
+        if not employees_have_movements(employees):
+            raise HTTPException(status_code=503, detail="No se pudieron actualizar los empleados y su historial.")
+        return {"employees": employees, "novedades": employee_novedades_from_rows(employees), "source": "snapshot"}
+
+    novedades = employee_novedades_from_rows(employees)
+    paired_payload = {"employees": employees, "novedades": novedades}
+    try:
+        previous = load_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY)
+        if previous != paired_payload:
+            save_installation_snapshot(db, install.id, EMPLOYEES_SNAPSHOT_KEY, paired_payload)
+    except Exception:
+        db.rollback()
+    return {**paired_payload, "source": "live"}
+
+
 @router.get("/employees/novedades")
 def get_empleado_novedades(
     installation_id: Optional[str] = Query(default=None),
