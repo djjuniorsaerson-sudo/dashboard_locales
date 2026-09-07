@@ -206,6 +206,12 @@ export default function Repartidores() {
   const getHistoryDate = (trip) => String(
     trip.created_at || trip.assigned_at || trip.marked_at || trip.order_created_at || ''
   ).trim();
+  const getReturnedFromDriver = (trip) => String(
+    trip.from_repartidor_name || trip.from_driver_name || trip.from_name || ''
+  ).trim() || 'SISTEMA';
+  const getReturnedToDriver = (trip) => String(
+    trip.to_repartidor_name || trip.to_driver_name || trip.to_name || trip.repartidor_name || trip.driver_name || ''
+  ).trim() || '-';
   const formatHistoryDate = (trip) => {
     const rawDate = getHistoryDate(trip);
     if (!rawDate) {
@@ -470,8 +476,8 @@ export default function Repartidores() {
                                     Devuelto
                                 </div>
                             </div>
-                            <div className="text-xs text-gray-400 mb-1">De: <span className="font-medium text-gray-300">{trip.from_repartidor_name || 'SISTEMA'}</span></div>
-                            <div className="text-xs text-gray-400 mb-1">A: <span className="font-medium text-yellow-400 uppercase">{trip.repartidor_name}</span></div>
+                            <div className="text-xs text-gray-400 mb-1">De: <span className="font-medium text-gray-300">{getReturnedFromDriver(trip)}</span></div>
+                            <div className="text-xs text-gray-400 mb-1">A: <span className="font-medium text-yellow-400 uppercase">{getReturnedToDriver(trip)}</span></div>
                             <div className="text-xs text-gray-400 mb-1">Cliente: <span className="font-medium text-gray-300">{getHistoryClient(trip)}</span></div>
                             <div className="text-xs text-gray-400 mb-1">Direccion: <span className="font-medium text-gray-300">{getHistoryAddress(trip)}</span></div>
                             <div className="text-xs text-gray-400 mb-1">Total: <span className="font-bold text-emerald-400">${Number(trip.total_amount || trip.total || 0).toLocaleString()}</span></div>

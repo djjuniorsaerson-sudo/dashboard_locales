@@ -1235,6 +1235,20 @@ def normalize_repartidor_history_rows(rows):
                 "status": status,
                 "created_at": created_at,
                 "total_amount": safe_float(row.get("total_amount") or row.get("total") or row.get("amount")),
+                "from_repartidor_name": str(
+                    row.get("from_repartidor_name")
+                    or row.get("from_driver_name")
+                    or row.get("from_name")
+                    or ""
+                ).strip(),
+                "to_repartidor_name": str(
+                    row.get("to_repartidor_name")
+                    or row.get("to_driver_name")
+                    or row.get("to_name")
+                    or row.get("repartidor_name")
+                    or row.get("driver_name")
+                    or ""
+                ).strip(),
             }
         )
     return normalized
