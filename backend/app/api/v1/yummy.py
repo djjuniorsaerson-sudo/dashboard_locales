@@ -444,12 +444,37 @@ def run_diagnostics(
     try:
         response = requests.get(url, timeout=7)
         elapsed_ms = int((datetime.utcnow() - start).total_seconds() * 1000)
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        module_checks = {}
+        for name, path in {
+            "pedidos_activos": "/api/pedidos",
+            "empleados": "/api/integration/employees",
+            "empleados_novedades": "/api/integration/employees/novedades",
+            "repartidores": "/api/integration/repartidores",
+            "repartidores_historial": "/api/integration/repartidores/history",
+            "delivery_entregados": "/api/integration/repartidores/delivered",
+        }.items():
+            try:
+                payload = client.request("GET", path)
+                rows = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+                module_checks[name] = {
+                    "ok": isinstance(rows, list),
+                    "count": len(rows) if isinstance(rows, list) else None,
+                }
+            except Exception as exc:
+                module_checks[name] = {
+                    "ok": False,
+                    "error": str(exc),
+                }
         return {
             "reachable": True,
             "url": url,
             "status_code": response.status_code,
             "response_time_ms": elapsed_ms,
             "response_json": response.json() if "application/json" in response.headers.get("Content-Type", "") else response.text,
+            "modules": module_checks,
+            "last_health_check": install.last_health_check,
+            "connection_status": install.connection_status,
         }
     except requests.exceptions.Timeout:
         return {"reachable": False, "error_type": "timeout", "message": "El conector no respondió dentro del tiempo permitido (7s)", "url": url}

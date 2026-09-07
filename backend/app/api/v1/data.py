@@ -84,6 +84,7 @@ class CashShiftDeleteData(BaseModel):
 
 EMPLOYEES_SNAPSHOT_KEY = "employees_snapshot_v1"
 CASHBOX_SNAPSHOT_KEY = "cashbox_report_snapshot_v1"
+REPARTIDORES_SNAPSHOT_KEY = "repartidores_snapshot_v1"
 
 
 def _is_valid_cashbox_date(value: str) -> bool:
@@ -98,6 +99,72 @@ def _is_valid_cashbox_date(value: str) -> bool:
 ACTIVE_ORDERS_SNAPSHOT_KEY = "active_orders_snapshot_v1"
 AUDIT_LOGS_SNAPSHOT_KEY = "audit_logs_snapshot_v1"
 OFFLINE_FALLBACK_THRESHOLD_SECONDS = 20
+FINAL_ORDER_STATES = {
+    "cancelado",
+    "cancelada",
+    "cancelled",
+    "canceled",
+    "anulado",
+    "anulada",
+    "cerrado",
+    "cerrada",
+    "cobrado",
+    "cobrada",
+    "entregado",
+    "entregada",
+    "delivered",
+    "completed",
+}
+
+
+def safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(str(value or "").replace(".", "").replace(",", ".") if isinstance(value, str) and "," in value else value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def normalize_order_state(value) -> str:
+    text = str(value or "").strip().lower().replace(" ", "_")
+    aliases = {
+        "preparando": "en_preparacion",
+        "en_curso": "en_preparacion",
+        "cancelled": "cancelado",
+        "canceled": "cancelado",
+        "delivered": "entregado",
+        "completed": "entregado",
+    }
+    return aliases.get(text, text)
+
+
+def panel_active_order(order: dict) -> bool:
+    if not isinstance(order, dict):
+        return False
+    if bool(order.get("archived")):
+        return False
+    state = normalize_order_state(order.get("state") or order.get("status"))
+    return state not in FINAL_ORDER_STATES
+
+
+def normalize_active_orders(orders: list[dict]) -> list[dict]:
+    normalized = []
+    seen = set()
+    for order in orders or []:
+        if not panel_active_order(order):
+            continue
+        order_id = safe_int(order.get("id"))
+        if order_id <= 0 or order_id in seen:
+            continue
+        seen.add(order_id)
+        normalized.append(order)
+    return normalized
 
 
 def _fetch_active_orders_for_installation(
@@ -117,6 +184,7 @@ def _fetch_active_orders_for_installation(
         orders = parsed.get("data", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
         if not isinstance(orders, list):
             raise RuntimeError("Remote active orders unavailable")
+        orders = normalize_active_orders(orders)
         save_installation_snapshot(
             db,
             install.id,
@@ -139,7 +207,7 @@ def remove_active_order_from_snapshot(db: Session, installation_id, order_id: in
     orders = [
         order
         for order in snapshot.get("orders", []) or []
-        if int(order.get("id") or 0) != target_id
+        if isinstance(order, dict) and safe_int(order.get("id")) != target_id
     ]
     save_installation_snapshot(db, installation_id, ACTIVE_ORDERS_SNAPSHOT_KEY, {"orders": orders})
 
@@ -588,7 +656,15 @@ def employee_novedades_from_rows(employees: list[dict]) -> list[dict]:
                 "sort_order": payment.get("sort_order") or payment.get("id") or 0,
                 "notes": payment.get("notes") or "",
             })
-    return sorted(rows, key=lambda item: (sort_value(item.get("sort_order")), str(item.get("id") or "")), reverse=True)
+    return sorted(
+        rows,
+        key=lambda item: (
+            str(item.get("sort_at") or item.get("event_date") or ""),
+            sort_value(item.get("sort_order")),
+            str(item.get("id") or ""),
+        ),
+        reverse=True,
+    )
 
 
 def get_integration_client_for_installation(
@@ -954,11 +1030,22 @@ def get_repartidores(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    client = get_integration_client_for_installation(db, current_user, installation_id)
-    payload = client.request("GET", "/api/integration/repartidores")
-    if isinstance(payload, dict) and "data" in payload:
-        return payload["data"]
-    return payload
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        return []
+    try:
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        payload = client.request("GET", "/api/integration/repartidores")
+        rows = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+        if not isinstance(rows, list):
+            raise RuntimeError("Remote repartidores unavailable")
+        current_payload = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
+        current_payload["drivers"] = rows
+        save_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY, current_payload)
+        return rows
+    except Exception:
+        snapshot = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
+        return snapshot.get("drivers", [])
 
 @router.get("/caja/report")
 def get_caja_report(
@@ -1088,11 +1175,22 @@ def get_global_repartidor_history(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    client = get_integration_client_for_installation(db, current_user, installation_id)
-    payload = client.request("GET", "/api/integration/repartidores/history")
-    if isinstance(payload, dict) and "data" in payload:
-        return payload["data"]
-    return payload
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        return []
+    try:
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        payload = client.request("GET", "/api/integration/repartidores/history")
+        rows = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+        if not isinstance(rows, list):
+            raise RuntimeError("Remote repartidores history unavailable")
+        current_payload = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
+        current_payload["history"] = rows
+        save_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY, current_payload)
+        return rows
+    except Exception:
+        snapshot = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
+        return snapshot.get("history", [])
 
 
 def merge_repartidores_delivered(delivered_payload, history_payload):
@@ -1102,7 +1200,7 @@ def merge_repartidores_delivered(delivered_payload, history_payload):
     for row in delivered_rows:
         if not isinstance(row, dict):
             continue
-        order_id = int(row.get("order_id") or 0)
+        order_id = safe_int(row.get("order_id"))
         if order_id > 0:
             rows_by_order[order_id] = {
                 **row,
@@ -1113,7 +1211,7 @@ def merge_repartidores_delivered(delivered_payload, history_payload):
     for row in history_rows:
         if not isinstance(row, dict):
             continue
-        order_id = int(row.get("order_id") or row.get("pedido_id") or 0)
+        order_id = safe_int(row.get("order_id") or row.get("pedido_id"))
         if order_id <= 0 or order_id in rows_by_order:
             continue
         movement_type = str(row.get("movement_type") or row.get("status") or "").strip().lower()
@@ -1137,14 +1235,14 @@ def merge_repartidores_delivered(delivered_payload, history_payload):
                 or row.get("destino")
                 or ""
             ).strip(),
-            "total_amount": float(row.get("total_amount") or 0),
-            "change_amount": float(row.get("change_amount") or 0),
+            "total_amount": safe_float(row.get("total_amount")),
+            "change_amount": safe_float(row.get("change_amount")),
             "marked_at": str(row.get("assigned_at") or row.get("created_at") or row.get("order_created_at") or "").strip(),
             "source": "history",
         }
     return sorted(
         rows_by_order.values(),
-        key=lambda row: (str(row.get("marked_at") or ""), int(row.get("order_id") or 0)),
+        key=lambda row: (str(row.get("marked_at") or ""), safe_int(row.get("order_id"))),
         reverse=True,
     )
 
@@ -1155,12 +1253,27 @@ def get_repartidores_delivered(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    client = get_integration_client_for_installation(db, current_user, installation_id)
-    delivered_payload = client.request("GET", "/api/integration/repartidores/delivered")
-    history_payload = client.request("GET", "/api/integration/repartidores/history")
-    delivered_rows = delivered_payload.get("data") if isinstance(delivered_payload, dict) and "data" in delivered_payload else delivered_payload
-    history_rows = history_payload.get("data") if isinstance(history_payload, dict) and "data" in history_payload else history_payload
-    return merge_repartidores_delivered(delivered_rows, history_rows)
+    install = get_installation_for_user(db, current_user, installation_id, online_only=False)
+    if not install:
+        return []
+    try:
+        client = YummyIntegrationClient(install.base_url, install.api_key)
+        delivered_payload = client.request("GET", "/api/integration/repartidores/delivered")
+        history_payload = client.request("GET", "/api/integration/repartidores/history")
+        delivered_rows = delivered_payload.get("data") if isinstance(delivered_payload, dict) and "data" in delivered_payload else delivered_payload
+        history_rows = history_payload.get("data") if isinstance(history_payload, dict) and "data" in history_payload else history_payload
+        rows = merge_repartidores_delivered(delivered_rows, history_rows)
+        current_payload = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
+        current_payload["delivered"] = rows
+        current_payload["history"] = history_rows if isinstance(history_rows, list) else current_payload.get("history", [])
+        save_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY, current_payload)
+        return rows
+    except Exception:
+        snapshot = load_installation_snapshot(db, install.id, REPARTIDORES_SNAPSHOT_KEY) or {}
+        delivered_rows = snapshot.get("delivered", [])
+        if delivered_rows:
+            return delivered_rows
+        return merge_repartidores_delivered([], snapshot.get("history", []))
 
 
 @router.get("/repartidores/export/xlsx")

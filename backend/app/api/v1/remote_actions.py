@@ -82,6 +82,32 @@ def queue_action_for_retry(action: RemoteAction, error_message: str) -> None:
     action.error_message = error_message
 
 
+def remote_actor_payload(payload: dict[str, Any], current_user: User) -> dict[str, Any]:
+    actor_email = str(getattr(current_user, "email", "") or "").strip()
+    actor_role = str(getattr(current_user, "role", "") or "").strip()
+    enriched_payload = dict(payload)
+    if actor_email:
+        enriched_payload.setdefault("_panel_actor_username", actor_email)
+        enriched_payload.setdefault("_panel_actor_email", actor_email)
+    if actor_role:
+        enriched_payload.setdefault("_panel_actor_role", actor_role)
+    return enriched_payload
+
+
+def remote_actor_headers(current_user: User) -> dict[str, str]:
+    actor_email = str(getattr(current_user, "email", "") or "").strip()
+    actor_role = str(getattr(current_user, "role", "") or "").strip()
+    headers = {
+        "Content-Type": "application/json",
+        "X-Terminal-Profile": "panel",
+    }
+    if actor_email:
+        headers["X-Actor-Username"] = actor_email
+    if actor_role:
+        headers["X-Actor-Role"] = actor_role
+    return headers
+
+
 @router.post("/installations/{installation_id}/create-order")
 def enqueue_create_order(
     installation_id: UUID,
@@ -90,12 +116,13 @@ def enqueue_create_order(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     installation = get_installation_for_user(db, installation_id, current_user)
+    action_payload = remote_actor_payload(payload.model_dump(), current_user)
     action = RemoteAction(
         installation_id=installation.id,
         created_by_user_id=current_user.id,
         action_type="CREATE_ORDER",
         status=RemoteActionStatus.PENDING,
-        payload=payload.model_dump(),
+        payload=action_payload,
     )
     db.add(action)
     db.flush()
@@ -103,11 +130,8 @@ def enqueue_create_order(
     try:
         response = requests.post(
             f"{installation.base_url.rstrip('/')}/api/pedidos",
-            json=payload.model_dump(),
-            headers={
-                "Content-Type": "application/json",
-                "X-Terminal-Profile": "admin",
-            },
+            json=action_payload,
+            headers=remote_actor_headers(current_user),
             timeout=15,
         )
         response_data = response.json()
