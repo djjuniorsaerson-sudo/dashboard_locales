@@ -83,6 +83,8 @@ class RemoteActionDispatchTests(unittest.TestCase):
 
     def test_create_order_is_durable_before_direct_http_and_preserves_id_on_timeout(self):
         payload = remote_actions.CreateOrderPayload(customer_name="Prueba", order_type="Delivery", payment_method="efectivo", items=[])
+        duplicate_check = MagicMock()
+        duplicate_check.json.return_value = {"ok": True, "data": {"duplicate": False}}
 
         def lost_response(*args, **kwargs):
             self.assertGreaterEqual(self.db.commit.call_count, 1)
@@ -92,12 +94,38 @@ class RemoteActionDispatchTests(unittest.TestCase):
             raise requests.Timeout()
 
         with patch.object(remote_actions, "get_installation_for_user", return_value=self.installation), \
+             patch.object(remote_actions.requests, "get", return_value=duplicate_check), \
              patch.object(remote_actions.requests, "post", side_effect=lost_response) as post:
             result = remote_actions.enqueue_create_order(self.installation.id, payload, self.db, self.user)
         self.assertEqual(result.status_code, 202)
         action = self.db.add.call_args.args[0]
         self.assertEqual(action.payload, post.call_args.kwargs["json"])
         self.assertEqual(action.status, RemoteActionStatus.PENDING)
+
+    def test_duplicate_preflight_stops_before_creating_a_remote_action(self):
+        payload = remote_actions.CreateOrderPayload(
+            customer_name="Prueba",
+            customer_phone="3511234567",
+            order_type="Delivery",
+            payment_method="efectivo",
+            items=[],
+        )
+        duplicate_check = MagicMock()
+        duplicate_check.json.return_value = {
+            "ok": True,
+            "data": {"duplicate": True, "matched_by": "telefono", "order": {"id": 99}},
+        }
+
+        with patch.object(remote_actions, "get_installation_for_user", return_value=self.installation), \
+             patch.object(remote_actions.requests, "get", return_value=duplicate_check), \
+             patch.object(remote_actions.requests, "post") as post:
+            with self.assertRaises(HTTPException) as raised:
+                remote_actions.enqueue_create_order(self.installation.id, payload, self.db, self.user)
+
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertIn("crear", raised.exception.detail["message"].lower())
+        self.db.add.assert_not_called()
+        post.assert_not_called()
 
     def test_late_failure_cannot_downgrade_completed_action(self):
         action = SimpleNamespace(status=RemoteActionStatus.COMPLETED, result_payload={"body": {"ok": True}})

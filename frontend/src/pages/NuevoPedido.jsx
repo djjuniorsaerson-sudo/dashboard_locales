@@ -817,7 +817,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
               <p className="text-orange-400 text-sm font-medium mb-2">{duplicateWarning}</p>
               <div className="flex gap-2">
                 <button onClick={() => setDuplicateWarning('')} className="flex-1 bg-gray-800 text-gray-300 text-xs py-2 rounded-lg hover:bg-gray-700 font-bold">Cancelar</button>
-                <button onClick={() => submitOrder(true)} className="flex-1 bg-orange-500 text-black text-xs py-2 rounded-lg hover:bg-orange-400 font-bold">Forzar Creación</button>
+                <button onClick={() => submitOrder(true)} className="flex-1 bg-orange-500 text-black text-xs py-2 rounded-lg hover:bg-orange-400 font-bold">Crear igual</button>
               </div>
             </div>
           )}

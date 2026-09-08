@@ -108,6 +108,40 @@ def remote_actor_headers(current_user: User) -> dict[str, str]:
     return headers
 
 
+def preflight_duplicate_order(installation: YummyInstallation, payload: CreateOrderPayload) -> None:
+    if payload.allow_duplicate:
+        return
+    phone = str(payload.customer_phone or "").strip()
+    address = str(payload.customer_address or "").strip()
+    if not phone and not address:
+        return
+    try:
+        response = requests.get(
+            f"{installation.base_url.rstrip('/')}/api/integration/orders/duplicate",
+            params={"customer_phone": phone, "customer_address": address},
+            headers={"X-Integration-Key": installation.api_key},
+            timeout=5,
+        )
+        response.raise_for_status()
+        response_payload = response.json()
+        result = response_payload.get("data", response_payload) if isinstance(response_payload, dict) else {}
+        if isinstance(result, dict) and result.get("duplicate"):
+            matched_by = str(result.get("matched_by") or "cliente").strip()
+            label = "teléfono" if matched_by == "telefono" else "domicilio"
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": f"Ya existe un pedido activo con el mismo {label}. ¿Querés crear este pedido igual?",
+                    "existing_order": result.get("order"),
+                    "matched_by": matched_by,
+                },
+            )
+    except HTTPException:
+        raise
+    except (requests.RequestException, ValueError):
+        return
+
+
 @router.post("/installations/{installation_id}/create-order")
 def enqueue_create_order(
     installation_id: UUID,
@@ -116,6 +150,7 @@ def enqueue_create_order(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     installation = get_installation_for_user(db, installation_id, current_user)
+    preflight_duplicate_order(installation, payload)
     action_payload = remote_actor_payload(payload.model_dump(), current_user)
     action_id = uuid4()
     action_payload["_operation_id"] = str(action_id)
