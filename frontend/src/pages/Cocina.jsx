@@ -204,7 +204,13 @@ export default function Cocina() {
     );
   };
 
-  const paymentStateLabel = (order) => (isOrderPaid(order) ? 'Pagado' : 'No pagado');
+  const isCashPayment = (order) => String(order?.payment_method || '').trim().toLowerCase() === 'efectivo';
+  const paymentStateLabel = (order) => {
+    if (isCashPayment(order)) {
+      return 'Pago en efectivo';
+    }
+    return isOrderPaid(order) ? 'Pagado' : 'No pagado';
+  };
 
   const displayOrders = activeTab === 'kitchen1' ? kitchen1Orders : 
                         activeTab === 'kitchen2' ? kitchen2Orders : readyOrders;
@@ -350,7 +356,9 @@ export default function Cocina() {
                             </span>
                             <span
                               className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
-                                isOrderPaid(order)
+                                isCashPayment(order)
+                                  ? 'border-sky-500/30 bg-sky-500/15 text-sky-300'
+                                  : isOrderPaid(order)
                                   ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
                                   : 'border-red-500/30 bg-red-500/15 text-red-300'
                               }`}
