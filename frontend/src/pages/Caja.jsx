@@ -663,7 +663,7 @@ export default function Caja() {
                     <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
                       <div className="flex items-center text-pink-400 mb-1">
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
-                        Débito
+                        QR
                       </div>
                       <p className="text-2xl font-bold text-white">{formatMoney(dayReport.debito || 0)}</p>
                     </div>

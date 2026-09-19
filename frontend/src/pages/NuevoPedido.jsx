@@ -716,7 +716,7 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                 <option value="efectivo">Efectivo</option>
                 <option value="transferencia">Transferencia</option>
                 <option value="online">Online</option>
-                <option value="debito">Débito</option>
+                <option value="debito">QR</option>
                 <option value="mixto">Mixto</option>
               </select>
             </div>

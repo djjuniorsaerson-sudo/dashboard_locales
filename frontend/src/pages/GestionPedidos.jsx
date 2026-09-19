@@ -250,7 +250,9 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                       <div className="text-2xl font-black text-emerald-400">{formatMoney(order.total)}</div>
                       <div className="flex items-center justify-end text-gray-500 text-xs mt-1 uppercase tracking-wide">
                         <CreditCard className="w-3.5 h-3.5 mr-1" />
-                        {order.payment_method || 'sin definir'}
+                        {String(order.payment_method || '').toLowerCase() === 'debito'
+                          ? 'QR'
+                          : order.payment_method || 'sin definir'}
                       </div>
                       {order?.is_paid && (
                         <div className="mt-2 inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-300">
