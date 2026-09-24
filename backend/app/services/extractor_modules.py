@@ -735,15 +735,35 @@ class ModulesExtractor:
     @staticmethod
     def get_repartidores(db: Session):
         query = text("""
+            WITH turno_actual AS (
+                SELECT NULLIF(value, '')::jsonb ->> 'started_at' AS started_at
+                FROM configuracion
+                WHERE key = 'delivery_shift_state'
+                LIMIT 1
+            ),
+            viajes_turno AS (
+                SELECT
+                    v.id,
+                    v.repartidor_id,
+                    v.total_amount,
+                    COUNT(vp.order_id) AS orders_count
+                FROM repartidor_viajes v
+                CROSS JOIN turno_actual t
+                LEFT JOIN repartidor_viaje_pedidos vp ON vp.viaje_id = v.id
+                WHERE COALESCE(t.started_at, '') <> ''
+                  AND v.created_at >= t.started_at
+                  AND v.status NOT IN ('rendido', 'liquidado', 'cancelado', 'settled')
+                GROUP BY v.id, v.repartidor_id, v.total_amount
+            )
             SELECT 
                 r.id, 
                 r.name, 
                 r.shift_label, 
                 r.is_active,
                 COALESCE(SUM(v.total_amount), 0) as pending_cash,
-                COUNT(v.id) as trips_count
+                COALESCE(SUM(v.orders_count), 0) as trips_count
             FROM repartidores r
-            LEFT JOIN repartidor_viajes v ON r.id = v.repartidor_id AND v.status NOT IN ('rendido', 'liquidado', 'cancelado', 'settled')
+            LEFT JOIN viajes_turno v ON r.id = v.repartidor_id
             WHERE r.is_deleted = false
             GROUP BY r.id, r.name, r.shift_label, r.is_active
             ORDER BY r.name ASC
