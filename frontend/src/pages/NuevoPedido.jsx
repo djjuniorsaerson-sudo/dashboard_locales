@@ -19,6 +19,8 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
+  const [orderTime, setOrderTime] = useState('');
+  const [notes, setNotes] = useState('');
   const [orderType, setOrderType] = useState('Delivery');
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const [paymentBreakdown, setPaymentBreakdown] = useState(EMPTY_PAYMENT_BREAKDOWN);
@@ -53,6 +55,8 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       setPhone(editPhone);
       setName(editName);
       setAddress(editAddress);
+      setOrderTime(String(orderToEdit.order_time || '').match(/\d{1,2}:\d{2}/)?.[0] || '');
+      setNotes(orderToEdit.notes || '');
       setOrderType(orderToEdit.order_type || 'Delivery');
       setPaymentMethod(orderToEdit.payment_method || 'efectivo');
       setPaymentBreakdown({
@@ -85,6 +89,8 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       }
     } else {
       setCart([]); setPhone(''); setName(''); setAddress('');
+      setOrderTime('');
+      setNotes('');
       setPaymentBreakdown(EMPTY_PAYMENT_BREAKDOWN);
       setClientMatches([]);
       setAvailableAddresses([]);
@@ -495,6 +501,8 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
       phone: resolvedPhone,
       customer_address: resolvedAddress,
       address: resolvedAddress,
+      order_time: orderTime,
+      notes: notes.trim(),
       order_type: orderType,
       payment_method: paymentMethod,
       allow_duplicate: overrideDuplicate,
@@ -564,6 +572,8 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
         setPhone('');
         setName('');
         setAddress('');
+        setOrderTime('');
+        setNotes('');
         setPaymentBreakdown(EMPTY_PAYMENT_BREAKDOWN);
         setClientMatches([]);
         setAvailableAddresses([]);
@@ -704,6 +714,28 @@ export default function NuevoPedido({ orderToEdit, setOrderToEdit, setCurrentVie
                   Se encontraron {availableAddresses.length} domicilios para este contacto.
                 </p>
               )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="sm:w-40">
+                <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Hora del pedido</label>
+                <input
+                  type="time"
+                  value={orderTime}
+                  onChange={(e) => setOrderTime(e.target.value)}
+                  className="w-full bg-gray-950/50 border border-gray-700/50 focus:border-blue-500/50 rounded-xl p-2.5 text-white mt-1 text-sm outline-none transition-colors [color-scheme:dark]"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Observaciones</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  className="w-full resize-none bg-gray-950/50 border border-gray-700/50 focus:border-blue-500/50 rounded-xl p-2.5 text-white mt-1 text-sm outline-none transition-colors"
+                  placeholder="Indicaciones especiales del pedido"
+                />
+              </div>
             </div>
             
             <div className="flex flex-col sm:flex-row gap-2 pt-2">

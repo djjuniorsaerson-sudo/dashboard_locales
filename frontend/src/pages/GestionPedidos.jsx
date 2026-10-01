@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Edit, XCircle, Search, CreditCard, User, Download } from 'lucide-react';
+import { Edit, XCircle, Search, CreditCard, User, Download, Clock, MessageSquare } from 'lucide-react';
 import LocationSyncBanner from '../components/LocationSyncBanner';
 import { dispatchPanelSync, subscribePanelSync } from '../components/syncEvents';
 import { useModal } from '../context/ModalContext';
@@ -136,7 +136,9 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
       String(o.customer_name || '').toLowerCase().includes(normalizedSearch) ||
       String(o.customer_phone || '').toLowerCase().includes(normalizedSearch) ||
       String(o.address || '').toLowerCase().includes(normalizedSearch) ||
-      String(o.customer_address || '').toLowerCase().includes(normalizedSearch)
+      String(o.customer_address || '').toLowerCase().includes(normalizedSearch) ||
+      String(o.order_time || '').toLowerCase().includes(normalizedSearch) ||
+      String(o.notes || '').toLowerCase().includes(normalizedSearch)
     );
   }) : [];
 
@@ -245,6 +247,12 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                           {getAddress(order)}
                         </div>
                       )}
+                      {order.order_time && (
+                        <div className="flex items-center text-blue-300 text-xs mt-2">
+                          <Clock className="w-3.5 h-3.5 mr-1.5" />
+                          Hora del pedido: {String(order.order_time).match(/\d{1,2}:\d{2}/)?.[0] || order.order_time}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-black text-emerald-400">{formatMoney(order.total)}</div>
@@ -263,6 +271,15 @@ export default function GestionPedidos({ setOrderToEdit, setCurrentView }) {
                   </div>
 
                   <div className="p-5 flex-1">
+                    {order.notes && (
+                      <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+                        <div className="mb-1 flex items-center text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">
+                          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                          Observaciones
+                        </div>
+                        <p className="whitespace-pre-wrap break-words">{order.notes}</p>
+                      </div>
+                    )}
                     <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.16em] mb-3">Detalle del Pedido</h4>
                     <div className="space-y-3">
                       {(order.items || []).map((item, i) => (

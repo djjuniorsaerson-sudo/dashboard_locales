@@ -21,6 +21,8 @@ class CreateOrderPayload(BaseModel):
     customer_name: str
     customer_phone: Optional[str] = ""
     customer_address: Optional[str] = ""
+    order_time: Optional[str] = ""
+    notes: Optional[str] = ""
     order_type: str
     payment_method: str
     allow_duplicate: bool = False
